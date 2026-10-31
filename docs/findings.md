@@ -124,6 +124,34 @@ What the mods rely on, and how each fact was established. "Live" means read in t
   backpack) comes from the collidables the cloth simulates against, so a fix there is inside Havok's objects.
   game.dll has `cape_velocity` and `cape_velocity_change`.
 
+## The helmet (live 2026-10-31)
+
+- Slot 0 of each of the avatar record's three unit arrays (above) is the helmet. At First Person's 74 degree field of
+  view its brim shows across the top of the view, idle and moving; hidden the way the cape is.
+
+## The ready pose (live 2026-10-31)
+
+- The game's hip-fire pose holds the hands 0.40-0.47 m below the eye and 0.02-0.19 m in front of it: 65-90 degrees below
+  the line of sight. The barrel is 16 degrees from the body's facing standing, 47-52 walking or sprinting (across the
+  chest), 80-90 reloading.
+- Writing a unit's world poses does not reach the render. Setting the joints' local poses (exe+0x1FCAD0) and updating
+  the unit (exe+0x1B2DC0) before the render step does. Putting the poses back and updating again after the render
+  blurred the weapon (the renderer sees it move); putting the local poses back and copying the saved world poses back
+  without an update keeps the game's logic on its own pose and the render sharp.
+- A unit's scene graph +0x18 is the world-pose array of the unit it is linked to (World.link_unit): the weapon's points
+  at the Helldiver's, each attachment's at the weapon's. A scope's root sits 5 cm off its mount node, so finding the
+  parts by place missed it and it stayed at the hip.
+
+## Depth of field (live 2026-10-31)
+
+- With the user's settings (`dof_enabled`, `motion_blur_enabled` on) the weapon in first person was blurred. Turning
+  each off live: depth of field off made it sharp, motion blur off did not. The game focuses for its third-person
+  camera.
+- `Application.set_render_setting` (Lua binding exe+0x3F9CC0): a string value goes to exe+0x10D880 (renderer
+  `[[exe+0x23621A8]+0x338]`, unused, name, value), queued to the render thread; "false" and "true" work for
+  `dof_enabled`. `Application.render_setting` reads the dictionary `[exe+0x1A102B8]` (exe+0x4BB100): count +0, 24-byte
+  entries +8 sorted by IdString32 at +0x10, variant type +0 (4 = bool, value +8).
+
 ## Cautions
 
 - A harness Lua call that read `Unit.num_scene_graph_items` and `Unit.mesh` of every unit within 1.5 m of the Helldiver

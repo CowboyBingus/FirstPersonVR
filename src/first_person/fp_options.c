@@ -10,6 +10,8 @@
  *     mods_may_change_view = true      ; other mods' requests count (a vehicle mod's first person, say)
  *     eye_forward = 0.12               ; metres from the head node along the view
  *     eye_up = 0.06                    ; and up
+ *     fov = 74                         ; the vertical field of view in first person, in degrees (40-110), or game
+ *     ready_pose = true                ; the weapon held up in the view while hip firing
  *
  * Unknown keys and bad values are logged and left at their defaults.
  */
@@ -25,7 +27,9 @@
 
 #define FP_DEFAULT_TOGGLE 0x75u /* VK_F6 */
 
-static FpOptions g_options = {{1, 1, FP_SITUATION_ON_FOOT}, FP_DEFAULT_TOGGLE, 0.12f, 0.06f};
+#define FP_DEFAULT_FOV 74.0f /* Arma 3's: fovTop 0.75 (2 atan 0.75 = 73.7 degrees), about 106 wide at 16:9 */
+
+static FpOptions g_options = {{1, 1, FP_SITUATION_ON_FOOT}, FP_DEFAULT_TOGGLE, 0.12f, 0.06f, FP_DEFAULT_FOV, 1};
 static int g_keyDown;
 
 /* mods/first-person/options.ini as shipped (a test keeps the two the same). */
@@ -40,7 +44,11 @@ static const char kDefaults[] =
     "mods_may_change_view = true\n"
     "; the eye, from the head node: metres along the view, and up\n"
     "eye_forward = 0.12\n"
-    "eye_up = 0.06\n";
+    "eye_up = 0.06\n"
+    "; the field of view in first person: degrees top to bottom (40-110), or game for the game's own\n"
+    "fov = 74\n"
+    "; the weapon held up in the view while hip firing, as a soldier carries a rifle at the ready\n"
+    "ready_pose = true\n";
 
 static const struct
 {
@@ -61,6 +69,8 @@ void fp_options_defaults(FpOptions* options)
     options->toggle_key = FP_DEFAULT_TOGGLE;
     options->eye_forward = 0.12f;
     options->eye_up = 0.06f;
+    options->fov = FP_DEFAULT_FOV;
+    options->ready_pose = 1;
 }
 
 const FpOptions* fp_options(void) { return &g_options; }
@@ -125,6 +135,16 @@ static int Metres(const char* value, float* out)
     return 1;
 }
 
+static int Degrees(const char* value, float* out)
+{
+    if (!strcmp(value, "game")) { *out = 0; return 1; }
+    char* end;
+    float f = strtof(value, &end);
+    if (end == value || *end != 0 || !(f >= 40.0f && f <= 110.0f)) return 0;
+    *out = f;
+    return 1;
+}
+
 /* One `key = value` line into options; 1 when it was understood. */
 static int Line(char* key, char* value, FpOptions* options)
 {
@@ -134,6 +154,8 @@ static int Line(char* key, char* value, FpOptions* options)
     if (!strcmp(key, "mods_may_change_view")) return Bool(value, &options->settings.mods_may_change);
     if (!strcmp(key, "eye_forward")) return Metres(value, &options->eye_forward);
     if (!strcmp(key, "eye_up")) return Metres(value, &options->eye_up);
+    if (!strcmp(key, "fov")) return Degrees(value, &options->fov);
+    if (!strcmp(key, "ready_pose")) return Bool(value, &options->ready_pose);
     return 0;
 }
 
@@ -187,9 +209,9 @@ void fp_options_load(void)
     fclose(file);
     text[n] = 0;
     fp_options_parse(text, &g_options);
-    fpv_log("options", "%s: %s, toggle key 0x%02X, first person in 0x%02X, mods %s", path,
+    fpv_log("options", "%s: %s, toggle key 0x%02X, first person in 0x%02X, mods %s, fov %.0f", path,
         g_options.settings.enabled ? "on" : "off", g_options.toggle_key, g_options.settings.first_in,
-        g_options.settings.mods_may_change ? "may change the view" : "may not change the view");
+        g_options.settings.mods_may_change ? "may change the view" : "may not change the view", g_options.fov);
 }
 
 /* The key is down and the game's window is the one in front (a key typed elsewhere is not the game's). */

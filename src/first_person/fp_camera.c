@@ -27,6 +27,12 @@
  * from it, live); while the game's camera is within FP_GAME_SIGHTS of the head, First Person steps aside and blends to
  * it, and comes back when the aim ends.
  *
+ * The field of view is wider in first person: the options' fov (74 degrees top to bottom by default, Arma 3's, against
+ * the game's 55), so the hands and the weapon below the eye are in the view as they are in a person's. The game's own
+ * zoom (aiming in) still narrows it by as much as it does in third person.
+ *
+ * While hip firing, the weapon is held up in the view (fp_pose.c), for the render only.
+ *
  * Switching between the views (on foot or not, the player's toggle, a mod's request) blends over FP_BLEND_SECONDS: the
  * frame's pose is mixed between the game's and First Person's. The Helldiver's capes are hidden while the blend is past
  * half way (fp_body.c).
@@ -47,6 +53,7 @@
 #define FP_EYE_AWAY_OUT 0.35f   /* and looking straight down with the body facing the other way */
 #define FP_BLEND_SECONDS 0.25f
 #define FP_GAME_SIGHTS 0.5f     /* the game's camera this near the head is its own first-person aim */
+#define FP_GAME_FOV 0.96f       /* the game's own vertical field of view, unzoomed (live: 0.9599 rad, 55 degrees) */
 
 static struct
 {
@@ -215,6 +222,17 @@ static void FirstPersonPose(const float* game, FpvVec3 head, FpvVec3 root, FpvVe
 }
 
 /* The blend moved a frame towards the view in use. */
+/* The frame's field of view: the options' fov in place of the game's unzoomed one, scaled with the game's own zoom (the
+ * tangent of half the angle is multiplied, so aiming in narrows the view as much as it does in third person), mixed in
+ * by t. */
+static void Fov(float t)
+{
+    float target = fp_options()->fov, game = fpv_camera_fov();
+    if (target <= 0 || game <= 0) return;
+    float k = tanf(target * 3.14159265f / 360.0f) / tanf(FP_GAME_FOV / 2);
+    fpv_camera_set_fov(2 * atanf(tanf(game / 2) * (1 + (k - 1) * t)));
+}
+
 static float Blend(float blend, int active, float dt)
 {
     float step = dt / FP_BLEND_SECONDS;
@@ -235,6 +253,17 @@ static int OnFoot(int known, int mission, FpvVec3 d)
         g.away = 0;
     }
     return known && mission && close;
+}
+
+void fp_camera_after(void* context) { fp_pose_restore(); }
+
+/* The weapon held up in the view (fp_pose.c), aimed where the shots land; not while the game's own sights zoom. */
+static void ReadyPose(const float* pose, FpvVec3 facing, float t, float dt)
+{
+    if (!fp_options()->ready_pose) return;
+    float gameFov = fpv_camera_fov(), d = fp_aim_distance();
+    FpvVec3 target = fpv_add(fpv_pose_position(pose), fpv_scale(fpv_pose_forward(pose), d > 1 ? d : 100.0f));
+    fp_pose_apply(g.unit, pose, target, facing, gameFov > 0 && gameFov < FP_GAME_FOV * 0.97f, t, dt);
 }
 
 int fp_camera_filter(float* pose, void* context)
@@ -259,11 +288,14 @@ int fp_camera_filter(float* pose, void* context)
     int fresh = g.blend <= 0;
     g.blend = known ? Blend(g.blend, active && !sights, dt) : 0;
     fp_body_tick(known ? g.ref : 0, g.blend > 0.5f);
+    fp_dof_tick(known && g.blend > 0.5f);
     if (g.blend <= 0) return 0;
     float game[16], view[16];
     memcpy(game, pose, sizeof game);
     FirstPersonPose(game, head, root, facing, fresh, dt, view);
     float t = g.blend * g.blend * (3 - 2 * g.blend);
     if (t >= 1 || !fpv_pose_blend(game, view, t, pose)) memcpy(pose, view, sizeof view);
+    ReadyPose(pose, facing, t, dt);
+    Fov(t);
     return 1;
 }

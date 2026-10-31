@@ -15,7 +15,11 @@ HF_MOD_EXPORT const FirstPersonApi* first_person_get_api(uint32_t version)
 static void OnGameLoaded(HfMod* mod, HfEvent event, void* user)
 {
     fpv_host_modules();
-    if (fpv_camera_install(FPV_PRIORITY_FIRST_PERSON)) fpv_camera_set_filter(fp_camera_filter, NULL);
+    if (fpv_camera_install(FPV_PRIORITY_FIRST_PERSON))
+    {
+        fpv_camera_set_filter(fp_camera_filter, NULL);
+        fpv_camera_set_after(fp_camera_after);
+    }
 #ifdef FPV_PROBE
     fp_probe_install();
 #endif
@@ -27,6 +31,8 @@ HF_MOD_EXPORT int hellforge_mod_init(const HfApi* api, HfMod* mod)
     fp_camera_reset();
     fp_aim_reset();
     fp_body_reset();
+    fp_pose_reset();
+    fp_dof_reset();
     if (!fpv_host_init(api, mod)) return 1;
     fp_options_load();
     fp_options_apply();

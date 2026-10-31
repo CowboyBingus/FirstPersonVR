@@ -7,7 +7,7 @@
 #include "fpv.h"
 
 #define FAKE_UNITS 8
-#define FAKE_NODES 4
+#define FAKE_NODES 16
 
 typedef struct FakeUnit
 {
@@ -24,16 +24,21 @@ typedef struct FakeUnit
         uint8_t pad1[0x0C];
         uintptr_t local;       /* +0x20 */
         uintptr_t world;       /* +0x28 */
-        uint8_t pad2[0x10];
+        uintptr_t pad2;
+        uintptr_t parents;     /* +0x38 */
         uintptr_t names;       /* +0x40 */
     } graph;
     float local[FAKE_NODES][16];
     float world[FAKE_NODES][16];
     uint32_t names[FAKE_NODES];
+    uint32_t parents[FAKE_NODES]; /* the parent in the high 16 bits */
     float game[16];            /* the pose the game gives node 0 every frame (the render step puts it back) */
+    float camera[16];          /* a Camera: the vertical fov at +0x34 (camera[13]) */
+    float gameFov;             /* the fov the game gives it every frame (the render step puts it back) */
 } FakeUnit;
 
 extern FakeUnit fake_units[FAKE_UNITS];
+extern float fake_rendered_fov; /* the camera unit's fov the last frame rendered with */
 extern int fake_steps, fake_sets, fake_updates;
 extern float fake_set_pose[16];
 

@@ -12,8 +12,13 @@ Both change your own view only, so friends and lobbies do not need them.
 The mods are in progress. First Person, on foot in missions (seen in game 2026-10-31):
 
 - The camera at the Helldiver's eyes, steadied so running does not bob the view, down to the ground when prone.
-- Your cape is hidden while you look through your Helldiver's eyes (it hung in the view looking down), and shown
-  again in third person. A cape hidden by another mod stays hidden.
+- A wider view, Arma 3's 74 degrees top to bottom (the game's is 55), with the weapon held up at the lower right of
+  the view while hip firing, as a soldier carries a rifle at the ready, its scope and other attachments on it. It
+  goes back to the game's own pose while you aim (right mouse), reload, throw or melee.
+- Your cape and helmet are hidden while you look through your Helldiver's eyes (the cape hung in the view looking
+  down, the helmet's brim across the top), and shown again in third person. One hidden by another mod stays hidden.
+- Depth of field is off in first person (the game focuses it a few metres out, so the weapon in your hands was always
+  blurred), and back to your setting in third person.
 - Shots land at the centre of the screen: aiming shows the weapon and the game's reticle there.
 - The game's own first-person aim (middle mouse while aiming: sights and scopes) is kept, and First Person comes back
   when the aim ends.
@@ -35,6 +40,8 @@ does nothing yet. [docs/plan.md](docs/plan.md) has the groups and what each one 
 | `first_person_in` | `on_foot` | the situations that are first person: `on_foot`, `vehicle`, `mech`, `emplacement`, `hellpod`, `ship`, `ragdoll` (only `on_foot` is detected so far) |
 | `mods_may_change_view` | `true` | other mods' requests count |
 | `eye_forward`, `eye_up` | `0.12`, `0.06` | the eye's place from the head, in metres (-0.5 to 0.5) |
+| `fov` | `74` | the field of view in first person, degrees top to bottom (40-110), or `game` for the game's own 55 |
+| `ready_pose` | `true` | the weapon held up in the view while hip firing (`false`: the game's pose, the weapon at the belt) |
 
 The mod's log (the session's `mod-cowboybingus.first-person.log`) says what it read, and why the view is third person
 when it switches.

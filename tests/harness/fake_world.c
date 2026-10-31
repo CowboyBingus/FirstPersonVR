@@ -6,6 +6,7 @@
 #define WORLD_RENDER_POSE 0x230920u
 
 FakeUnit fake_units[FAKE_UNITS];
+float fake_rendered_fov;
 int fake_steps, fake_sets, fake_updates;
 float fake_set_pose[16];
 
@@ -16,12 +17,18 @@ static uint32_t g_count;
 
 static int Cameras(uintptr_t unit) { return ((FakeUnit*)unit)->cameras; }
 static uintptr_t Graph(uintptr_t unit) { return (uintptr_t)&((FakeUnit*)unit)->graph; }
+static uintptr_t Camera(uintptr_t unit, uint32_t index) { return index == 0 ? (uintptr_t)((FakeUnit*)unit)->camera : 0; }
 /* The frame renders, then the game moves its camera again for the next one: node 0 back to the game's pose. */
 static void Step(void* app)
 {
     fake_steps++;
     for (int i = 0; i < FAKE_UNITS; i++)
-        if (fake_units[i].ref != 0) memcpy(fake_units[i].local[0], fake_units[i].game, sizeof fake_units[i].game);
+    {
+        if (fake_units[i].ref == 0) continue;
+        if (fake_units[i].cameras > 0) fake_rendered_fov = fake_units[i].camera[13];
+        memcpy(fake_units[i].local[0], fake_units[i].game, sizeof fake_units[i].game);
+        fake_units[i].camera[13] = fake_units[i].gameFov;
+    }
 }
 static void Update(uintptr_t world, uintptr_t unit) { fake_updates++; }
 static uintptr_t World(void) { return (uintptr_t)g_world; }
@@ -53,6 +60,7 @@ void (*fake_world(void))(void* app)
     fake_steps = fake_sets = fake_updates = 0;
     g_count = 0;
     g_vtable[0x160 / 8] = (uintptr_t)Cameras;
+    g_vtable[0x168 / 8] = (uintptr_t)Camera;
     g_vtable[0xE8 / 8] = (uintptr_t)Graph;
     uintptr_t list = (uintptr_t)g_list;
     memcpy(g_world + WORLD_UNITS + 8, &list, sizeof list);
@@ -101,9 +109,11 @@ FakeUnit* fake_add_unit(uint64_t resource, int cameras, float x, float y, float 
     unit->resource_name = resource;
     unit->resource = (uintptr_t)&unit->resource_name;
     unit->cameras = cameras;
+    unit->gameFov = unit->camera[13] = 0.96f;
     unit->graph.local = (uintptr_t)unit->local;
     unit->graph.world = (uintptr_t)unit->world;
     unit->graph.names = (uintptr_t)unit->names;
+    unit->graph.parents = (uintptr_t)unit->parents;
     unit->graph.count = 1;
     unit->names[0] = fpv_id32("root");
     Pose(unit->local[0], x, y, z);

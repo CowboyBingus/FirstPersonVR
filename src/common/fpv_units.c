@@ -16,14 +16,18 @@
 #define UNITS_WORLD_COUNT 0x2305B8u
 #define UNITS_MAX 200000u
 #define GRAPH_COUNT 0x10u
+#define GRAPH_LINK 0x18u    /* the world poses of the unit it is linked to (live: a weapon's parts -> the weapon's) */
 #define GRAPH_WORLD 0x28u
+#define GRAPH_PARENTS 0x38u  /* u32 a node: its parent's index in the high 16 bits (live: head 90 -> neck 89) */
 #define GRAPH_NAMES 0x40u
 #define GRAPH_MAX_NODES 4096u
 #define UNIT_GRAPH_METHOD 0xE8u
 #define UNIT_CAMERAS_METHOD 0x160u
+#define UNIT_CAMERA_METHOD 0x168u    /* mov rax,[rcx+0x118]; mov rax,[rax+rdx*8]: camera i */
 
 typedef uintptr_t (*GraphFn)(uintptr_t unit);
 typedef int (*CamerasFn)(uintptr_t unit);
+typedef uintptr_t (*CameraFn)(uintptr_t unit, uint32_t index);
 
 uint64_t fpv_murmur64(const void* key, size_t length)
 {
@@ -72,6 +76,13 @@ int fpv_unit_cameras(uintptr_t unit)
     return method != 0 ? ((CamerasFn)method)(unit) : 0;
 }
 
+uintptr_t fpv_unit_camera(uintptr_t unit, int index)
+{
+    if (index < 0 || index >= fpv_unit_cameras(unit)) return 0;
+    uintptr_t method = Method(unit, UNIT_CAMERA_METHOD);
+    return method != 0 ? ((CameraFn)method)(unit, (uint32_t)index) : 0;
+}
+
 uint32_t fpv_unit_ref(uintptr_t unit)
 {
     uint32_t ref = 0;
@@ -100,6 +111,32 @@ int32_t fpv_unit_node(uintptr_t unit, uint32_t name)
         if (hash == name) return (int32_t)i;
     }
     return -1;
+}
+
+int32_t fpv_unit_parent(uintptr_t unit, int32_t node)
+{
+    uintptr_t graph = fpv_unit_graph(unit), parents = 0;
+    uint32_t count = 0, entry = 0;
+    if (graph == 0 || node <= 0 || !fpv_read(graph + GRAPH_COUNT, &count, sizeof count) || (uint32_t)node >= count ||
+        !fpv_read(graph + GRAPH_PARENTS, &parents, sizeof parents) || parents == 0 ||
+        !fpv_read(parents + 4 * (uintptr_t)node, &entry, sizeof entry)) return -1;
+    uint32_t parent = entry >> 16;
+    return parent < count && parent != (uint32_t)node ? (int32_t)parent : -1;
+}
+
+uintptr_t fpv_unit_link(uintptr_t unit)
+{
+    uintptr_t graph = fpv_unit_graph(unit), poses = 0;
+    return graph != 0 && fpv_read(graph + GRAPH_LINK, &poses, sizeof poses) ? poses : 0;
+}
+
+float* fpv_unit_world_poses(uintptr_t unit, uint32_t* count)
+{
+    uintptr_t graph = fpv_unit_graph(unit), poses = 0;
+    *count = 0;
+    if (graph == 0 || !fpv_read(graph + GRAPH_COUNT, count, sizeof *count) || *count == 0 || *count > GRAPH_MAX_NODES ||
+        !fpv_read(graph + GRAPH_WORLD, &poses, sizeof poses) || poses == 0) { *count = 0; return NULL; }
+    return (float*)poses;
 }
 
 int fpv_unit_world_pose(uintptr_t unit, int32_t node, float* matrix)

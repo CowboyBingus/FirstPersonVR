@@ -22,6 +22,8 @@ typedef struct FpOptions
     FpSettings settings;
     uint32_t toggle_key;    /* a Windows virtual-key code; 0: none */
     float eye_forward, eye_up;
+    float fov;              /* first person's vertical field of view in degrees when the game's is unzoomed; 0: the game's */
+    int ready_pose;         /* the weapon held up in the view while hip firing (fp_pose.c) */
 } FpOptions;
 
 void fp_options_defaults(FpOptions* options);
@@ -59,9 +61,22 @@ typedef int (*FpAimRaycast)(uint32_t query, const float* from, const float* dir,
 void fp_aim_set_for_test(FpAimRaycast raycast, uint32_t query);
 #endif
 
-/* The body (fp_body.c): the Helldiver's capes hidden while `hide`, shown again after (or when ref changes). Once a
+/* Depth of field (fp_dof.c): off while firstPerson (the weapon is in its near blur), on again after when First Person
+ * turned it off. Once a frame. */
+void fp_dof_reset(void);
+void fp_dof_tick(int firstPerson);
+typedef struct FpDofFns
+{
+    int (*get)(const char* name);                     /* a bool render setting: 1, 0, or -1 not found */
+    void (*set)(const char* name, const char* value);
+} FpDofFns;
+#ifdef FPV_TEST
+void fp_dof_set_for_test(const FpDofFns* fns);
+#endif
+
+/* The body (fp_body.c): the Helldiver's capes and helmet hidden while `hide`, shown again after (or when ref changes). Once a
  * frame with the Helldiver's unit reference (0: none). */
-#define FP_BODY_CAPES 3
+#define FP_BODY_CAPES 6
 void fp_body_reset(void);
 void fp_body_tick(uint32_t ref, int hide);
 int fp_body_hidden(void);
@@ -79,9 +94,22 @@ typedef struct FpBodyFns
 void fp_body_set_for_test(const FpBodyFns* fns);
 #endif
 
+/* The ready pose (fp_pose.c): for this frame's render, the hands and the weapon moved to the lower right of the view
+ * (`view`: the camera's pose this frame), the barrel turned to `target`, and the arms reaching them (`facing`: the body's
+ * level forward); `mix` 0..1 how much
+ * First Person's view this frame is, `aiming` the game's own aim (no pose). fp_pose_restore puts every pose back after the
+ * render. */
+void fp_pose_reset(void);
+void fp_pose_apply(uintptr_t diver, const float* view, FpvVec3 target, FpvVec3 facing, int aiming,
+    float mix, float dt);
+void fp_pose_restore(void);
+float fp_pose_weight(void);
+float fp_aim_distance(void);  /* the smoothed distance to where the game's line of fire hits (0: none yet) */
+
 /* The camera filter (fp_camera.c): the camera at the Helldiver's eyes while the view is First Person's. */
 void fp_camera_reset(void);
 int fp_camera_filter(float* pose, void* context);
+void fp_camera_after(void* context);  /* after the render: the ready pose put back */
 
 #ifdef FPV_PROBE
 /* A probe build's pose-setter census (fp_probe.c). */

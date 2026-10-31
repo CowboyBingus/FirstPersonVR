@@ -98,13 +98,26 @@ typedef struct FpvCameraStatus
 /* Hooks the engine's script render step (once). 1 installed, 0 refused. */
 int fpv_camera_install(int32_t priority);
 void fpv_camera_set_filter(FpvCameraFilter filter, void* context);
+/* Called after each frame's render step (whether or not the filter changed the frame): a filter that changed the scene
+ * for the render puts it back here. */
+void fpv_camera_set_after(void (*after)(void* context));
 /* Forget the camera unit (the world changed): it is looked for again on the next frame that needs it. */
 void fpv_camera_forget(void);
 void fpv_camera_status(FpvCameraStatus* out);
+/* A node's local pose (rotation rows 0-8, position 9-11, scale 12-14), 1 read; the engine's set_local_pose for it; and
+ * the engine's update of a unit in this frame's world (its world poses from the local ones, and on to the render), as
+ * the camera's pose is set. The game's animation sets its own poses again the next frame. */
+int fpv_unit_local_pose(uintptr_t unit, int32_t node, float* pose);
+void fpv_unit_set_local_pose(uint32_t ref, int32_t node, const float* pose);
+void fpv_unit_update(uintptr_t unit);
 /* The engine's Unit* for a unit reference (0 when the camera is not installed or the unit is gone). */
 uintptr_t fpv_engine_unit(uint32_t unit);
 /* The main world this frame's filter runs for (0 outside a filter's frame). */
 uintptr_t fpv_camera_world(void);
+/* The frame's vertical field of view in radians (0 outside a filter's frame or when it does not read), and a new one
+ * for this frame only (1 set). */
+float fpv_camera_fov(void);
+int fpv_camera_set_fov(float fov);
 
 /* ---- units (fpv_units.c) ----------------------------------------------------------------------------------------- */
 
@@ -119,6 +132,15 @@ uint64_t fpv_unit_resource(uintptr_t unit);
 int32_t fpv_unit_node(uintptr_t unit, uint32_t name);
 /* The node's world pose (row-major 4x4: right, forward, up, position rows). 1 read. */
 int fpv_unit_world_pose(uintptr_t unit, int32_t node, float* matrix);
+/* The unit's camera at index (the unit vtable's +0x168: its Camera*), 0 when it has none. */
+uintptr_t fpv_unit_camera(uintptr_t unit, int index);
+/* The node's parent (graph + 0x38: a u32 per node, the parent in the high 16 bits), -1 for the root or when unknown. */
+int32_t fpv_unit_parent(uintptr_t unit, int32_t node);
+/* The unit's world poses (16 floats a node, writable: a change holds until the engine next updates the unit), and how
+ * many; NULL when they do not read. */
+float* fpv_unit_world_poses(uintptr_t unit, uint32_t* count);
+/* The world poses of the unit this one is linked to (World.link_unit: a weapon's parts to the weapon), 0 if none. */
+uintptr_t fpv_unit_link(uintptr_t unit);
 /* The world's units: the count, and *list for fpv_world_unit. */
 uint32_t fpv_world_units(uintptr_t world, uintptr_t* list);
 uintptr_t fpv_world_unit(uintptr_t list, uint32_t index);

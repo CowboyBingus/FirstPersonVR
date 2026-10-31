@@ -27,12 +27,14 @@ says what that covers and what only a tester can check.
 2. **The camera on the head** (done, live). The camera at the head node, 0.12 m forward and 0.06 m up, facing where
    the game's camera faces, so the direction the game aims along is unchanged. Third person again when the Helldiver
    dies (the game's camera moves away from the head).
-3. **No head in the view** (cape done, live). The eye's place keeps the helmet and head out of the view. The capes are
-   hidden while the view is First Person's and shown again after (the engine's set_unit_visibility, as Vanilla Plus
-   Megapack's Hide Cape does it; fp_body.c). The cape's shadow goes with it. Still to try: a per-viewport or shadow-only
+3. **No head in the view** (done, live). The eye's place keeps the head out of the view. The capes and the helmet
+   are hidden while the view is First Person's and shown again after (the engine's set_unit_visibility, as Vanilla Plus
+   Megapack's Hide Cape does it; fp_body.c); at the 74 degree field of view the helmet's brim showed otherwise. Their
+   shadows go with them. Still to try: a per-viewport or shadow-only
    visibility, so the shadow stays.
-4. **The near plane and field of view.** Camera.set_near_range and set_vertical_fov (or their fields), so the weapon and
-   arms do not clip.
+4. **The field of view and the weapon** (done, live). 74 degrees top to bottom (Arma 3's; the Camera's field +0x34,
+   option `fov`), the weapon held up at the lower right while hip firing with its attachments (fp_pose.c, option
+   `ready_pose`), and depth of field off in first person so the weapon is sharp (fp_dof.c).
 5. **Aim** (done, live). The view turns from the eye to where the game's own line of fire hits (one damage line of sight
    ray a frame), so the reticle and the shots are at the screen's centre; the game's own first-person aim (its sights
    and scopes) is kept as it is.

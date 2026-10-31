@@ -110,6 +110,8 @@ static float Cast(FpvVec3 from, FpvVec3 dir)
     return isfinite(along) && along > 0 ? along : AIM_RANGE;
 }
 
+float fp_aim_distance(void) { return g.distance; }
+
 float fp_aim_smooth(float smoothed, float target, float dt)
 {
     if (smoothed <= 0 || !isfinite(smoothed)) return target;

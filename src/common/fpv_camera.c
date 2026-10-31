@@ -11,6 +11,9 @@
  * The pose is the frame's only: the game sets its own again before the next frame, so the game's aim, audio listener
  * and logic still see the game's camera. (Making aim agree with a moved camera is the first-person feature's job.)
  *
+ * A filter may also set the frame's vertical field of view (fpv_camera_set_fov): the camera unit's Camera (its first,
+ * the unit vtable's +0x168) holds it, and the game sets it again every frame.
+ *
  * Cost per frame with no filter: one branch. With one: a world call, two reads and the filter; the search over the
  * world's units runs only while the camera unit is not known (then every 30 frames until found).
  */
@@ -46,6 +49,7 @@ static UnitFn g_unit;
 static WorldFn g_world;
 static int g_installed;
 static FpvCameraFilter g_filter;
+static void (*g_after)(void* context);
 static void* g_context;
 static uint32_t g_ref;
 static uintptr_t g_refWorld;  /* the world g_ref was found in */
@@ -54,6 +58,7 @@ static float g_nearest = -1;
 static uint32_t g_frames;
 static int g_loggedFound, g_loggedMissing, g_loggedLost;
 static uintptr_t g_frameWorld;
+static uintptr_t g_frameCamera;  /* the camera unit's Camera this frame (0 outside a filter's frame) */
 /* A status line every CAM_STATUS_FRAMES frames, the first CAM_STATUS_LINES times: what the hook did since the last. */
 #define CAM_STATUS_FRAMES 900
 #define CAM_STATUS_LINES 12
@@ -148,7 +153,10 @@ static void Apply(void)
     }
     memcpy(pose, game, sizeof pose);
     g_diag.filtered++;
-    if (!g_filter(pose, g_context)) return;
+    g_frameCamera = fpv_unit_camera(unit, 0);
+    int changed = g_filter(pose, g_context);
+    g_frameCamera = 0;
+    if (!changed) return;
     g_setPose(g_ref, 0, pose);
     g_update(world, unit);
     g_frames++;
@@ -159,6 +167,7 @@ static void StepDetour(void* app)
 {
     Apply();
     g_step(app);
+    if (g_after != NULL) g_after(g_context);
 }
 
 int fpv_camera_install(int32_t priority)
@@ -197,9 +206,49 @@ void fpv_camera_set_filter(FpvCameraFilter filter, void* context)
     g_filter = filter;
 }
 
+void fpv_camera_set_after(void (*after)(void* context)) { g_after = after; }
+
+int fpv_unit_local_pose(uintptr_t unit, int32_t node, float* pose)
+{
+    uintptr_t graph = fpv_unit_graph(unit), poses = 0;
+    uint32_t count = 0;
+    if (graph == 0 || node < 0 || !fpv_read(graph + 0x10, &count, sizeof count) || (uint32_t)node >= count ||
+        !fpv_read(graph + 0x20, &poses, sizeof poses) || poses == 0) return 0;
+    return fpv_read(poses + 64 * (uintptr_t)node, pose, 16 * sizeof(float));
+}
+
+void fpv_unit_set_local_pose(uint32_t ref, int32_t node, const float* pose)
+{
+    if (g_setPose != NULL && ref != 0 && node >= 0) g_setPose(ref, node, pose);
+}
+
+void fpv_unit_update(uintptr_t unit)
+{
+    if (g_update != NULL && unit != 0 && g_frameWorld != 0) g_update(g_frameWorld, unit);
+}
+
 uintptr_t fpv_engine_unit(uint32_t unit) { return g_unit != NULL && unit != 0 ? g_unit(unit) : 0; }
 
 uintptr_t fpv_camera_world(void) { return g_frameWorld; }
+
+/* The Camera's vertical field of view (radians) at +0x34, near range +0x28, far range +0x2C (live: 0.96, 0.05, 5000; the
+ * same values Camera.vertical_fov, near_range and far_range give). The game sets it every frame before the render step,
+ * so a value set here holds for this frame only. */
+#define CAM_VERTICAL_FOV 0x34u
+
+float fpv_camera_fov(void)
+{
+    float fov = 0;
+    if (g_frameCamera == 0 || !fpv_read(g_frameCamera + CAM_VERTICAL_FOV, &fov, sizeof fov)) return 0;
+    return isfinite(fov) && fov > 0.01f && fov < 3.1f ? fov : 0;
+}
+
+int fpv_camera_set_fov(float fov)
+{
+    if (fpv_camera_fov() <= 0 || !isfinite(fov) || fov <= 0.01f || fov >= 3.1f) return 0;
+    *(volatile float*)(g_frameCamera + CAM_VERTICAL_FOV) = fov;
+    return 1;
+}
 
 void fpv_camera_forget(void)
 {

@@ -1,5 +1,6 @@
 /* First Person's camera against a fake world: the camera at the Helldiver's head on foot, third person when the camera
  * is far from it or the player switched First Person off, and a destroyed Helldiver noticed. */
+#include <math.h>
 #include "fp.h"
 #include "harness/fake_world.h"
 #include "harness/test.h"
@@ -228,6 +229,32 @@ static void SwitchingBlends(void)
     fpv_seconds_for_test(-1);
 }
 
+/* First person is wider (74 degrees against the game's 55) and keeps the game's zoom; third person is the game's. */
+static void FirstPersonIsWider(void)
+{
+    void (*step)(void*) = Setup();
+    FakeUnit* camera = fake_add_unit(1, 1, 0, -3, 2);
+    FakeUnit* diver = fake_add_unit(AVATAR, 0, 0, 0, 0);
+    fake_add_node(diver, "head", 0, 0, 1.6f);
+    double now = 100;
+    fpv_seconds_for_test(now);
+    step(NULL);
+    float k = tanf(74.0f * 3.14159265f / 360.0f) / tanf(0.48f);
+    CHECK(Near(fake_rendered_fov, 74.0f * 3.14159265f / 180.0f));
+    CHECK(Near(camera->camera[13], 0.96f));  /* the game's own again for the next frame */
+    camera->gameFov = camera->camera[13] = 0.5f;  /* the game zooms in */
+    now = Run(step, now, 0.025);
+    CHECK(Near(fake_rendered_fov, 2 * atanf(tanf(0.25f) * k)));
+    camera->gameFov = camera->camera[13] = 0.96f;
+    uint32_t off = fp_view_request("test", FP_SITUATION_ON_FOOT, FP_VIEW_THIRD, 0);
+    now = Run(step, now, 0.125);
+    CHECK(fake_rendered_fov > 0.97f && fake_rendered_fov < 1.28f); /* blending */
+    now = Run(step, now, 0.3);
+    CHECK(Near(fake_rendered_fov, 0.96f));
+    fp_view_release(off);
+    fpv_seconds_for_test(-1);
+}
+
 static void EyeIsSteadied(void)
 {
     void (*step)(void*) = Setup();
@@ -296,6 +323,7 @@ int main(void)
     RUN(HelldiverArrivingLaterIsFound);
     RUN(OutsideAMissionIsNotOnFoot);
     RUN(SwitchingBlends);
+    RUN(FirstPersonIsWider);
     RUN(EyeIsSteadied);
     RUN(GamesOwnSightsAreKept);
     TEST_END();

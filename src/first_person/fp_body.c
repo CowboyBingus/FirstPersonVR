@@ -1,6 +1,7 @@
-/* The parts of the local Helldiver First Person hides while the view is at its eyes: its capes. A cape hangs where the
- * eye goes looking down while running back or sideways, and flips over the view in a dive (live 2026-10-31); no eye
- * placement clears it, so it is hidden, the way Vanilla Plus Megapack's Hide Cape hides one (Match Your Colors,
+/* The parts of the local Helldiver First Person hides while the view is at its eyes: its capes and helmets. A cape hangs
+ * where the eye goes looking down while running back or sideways, and flips over the view in a dive; the helmet's brim
+ * shows across the top of the view at First Person's wider field of view (live 2026-10-31). No eye placement clears
+ * either, so they are hidden, the way Vanilla Plus Megapack's Hide Cape hides one (Match Your Colors,
  * myc_cloak.c).
  *
  * The capes: the local player's Helldiver (the player manager game.dll+0x3326468: player count +132, entity records
@@ -8,7 +9,7 @@
  * the Helldiver +936 + 32 * index: a script API unit handle, not the engine's unit reference First Person follows, live
  * 0x137 against 0x400054) -> its entity (game.dll+0x346BF98's map +0xF22EC8, records +0xF32F18, 24
  * bytes: the avatar resource, the avatar id +8) -> its avatar record (game.dll+0x3326D20's map +248, records +5532272 +
- * 440 * index) -> three arrays of 10 unit references at +220, a cape in slot 1 of each. Maps are open addressing u32
+ * 440 * index) -> three arrays of 10 unit references at +220, a helmet in slot 0 and a cape in slot 1 of each. Maps are open addressing u32
  * tables {data +0, capacity +8, empty key +12, multiplier +16}, probed as the game probes them.
  *
  * Hidden with the engine's set_unit_visibility (the script C API's Unit table, [game.dll+0x3326308]+24, slot +1624 =
@@ -144,7 +145,7 @@ static const char* AvatarUnits(uint32_t* refs)
     return fpv_read(at, refs, 30 * sizeof refs[0]) ? NULL : "the avatar's units do not read";
 }
 
-/* The local Helldiver's cape units and their first meshes; how many, or -1 with *why. (ref, the Helldiver First Person
+/* The local Helldiver's cape and helmet units (slots 0 and 1 of each array) and their first meshes; how many, or -1 with *why. (ref, the Helldiver First Person
  * follows, only tells when to look again.) */
 static int Capes(uint32_t ref, uint32_t* units, uintptr_t* meshes, int max, const char** why)
 {
@@ -153,9 +154,9 @@ static int Capes(uint32_t ref, uint32_t* units, uintptr_t* meshes, int max, cons
     *why = AvatarUnits(refs);
     if (*why != NULL) return -1;
     int n = 0;
-    for (int a = 0; a < 3 && n < max; a++)
+    for (int i = 0; i < 6 && n < max; i++)
     {
-        uint32_t unit = refs[10 * a + 1];
+        uint32_t unit = refs[10 * (i / 2) + i % 2];
         if (unit == 0 || unit == BODY_NO_UNIT || g.fns.alive(unit) == 0) continue;
         units[n] = unit;
         meshes[n++] = g.fns.meshes(unit) > 0 ? g.fns.mesh(unit, 0) : 0;
@@ -198,7 +199,7 @@ static int Ready(void)
     if (why != NULL && *why == 0) return 0;
     g.state = why == NULL ? 1 : -1;
     if (why != NULL)
-        fpv_log("body", "off (the engine's %s differs, build %s): the cape stays shown", why, FPV_GAME_BUILD);
+        fpv_log("body", "off (the engine's %s differs, build %s): the cape and helmet stay shown", why, FPV_GAME_BUILD);
     return g.state == 1;
 }
 
@@ -216,7 +217,7 @@ static void Show(void)
 {
     for (int i = 0; i < g.count; i++)
         if (g.mine[i] && g.fns.alive(g.units[i]) != 0) g.fns.visibility(g.units[i], 1, 1);
-    if (g.hidden && g.count > 0) fpv_log("body", "the cape shown");
+    if (g.hidden && g.count > 0) fpv_log("body", "the cape and helmet shown");
     g.hidden = 0;
     memset(g.mine, 0, sizeof g.mine);
 }
@@ -233,11 +234,11 @@ static int Resolve(void)
         if (g.count == 0) why = "it wears none yet";
         g.count = 0;
         g.wait = BODY_RETRY_FRAMES;
-        fpv_log_once(&g.loggedChain, "body", "the cape is not found (%s): it stays shown", why);
+        fpv_log_once(&g.loggedChain, "body", "the cape and helmet are not found (%s): they stay shown", why);
         return 0;
     }
     g.resolved = 1;
-    fpv_log("body", "the Helldiver (unit %u) wears %d cape%s", g.ref, g.count, g.count == 1 ? "" : "s");
+    fpv_log("body", "the Helldiver (unit %u) wears %d cape and helmet unit%s", g.ref, g.count, g.count == 1 ? "" : "s");
     return 1;
 }
 
@@ -253,7 +254,7 @@ static void Hide(void)
         n++;
     }
     g.hidden = 1;
-    if (g.count > 0) fpv_log("body", "the cape hidden (%d of %d)", n, g.count);
+    if (g.count > 0) fpv_log("body", "the cape and helmet hidden (%d of %d)", n, g.count);
 }
 
 /* One cape a frame: shown by something else (the hellpod's exit) while it should be hidden, hidden again. */

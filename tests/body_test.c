@@ -1,4 +1,4 @@
-/* The body: the Helldiver's capes hidden in first person and shown again after, one hidden already left alone, one the
+/* The body: the Helldiver's capes and helmet hidden in first person and shown again after, one hidden already left alone, one the
  * game shows again hidden again, and a changed Helldiver's capes shown. */
 #include <string.h>
 #include "fp.h"
@@ -86,9 +86,9 @@ static void CapesHiddenInFirstPersonAndShownAfter(void)
     CHECK_EQ(f.shows, 2);
     CHECK(f.masks[0] == 0xFF && f.masks[1] == 0xFF);
     CHECK_EQ(fp_body_hidden(), 0);
-    CHECK_LOG("wears 2 capes");
-    CHECK_LOG("the cape hidden (2 of 2)");
-    CHECK_LOG("the cape shown");
+    CHECK_LOG("wears 2 cape and helmet units");
+    CHECK_LOG("the cape and helmet hidden (2 of 2)");
+    CHECK_LOG("the cape and helmet shown");
 }
 
 static void CapeHiddenAlreadyIsLeftHidden(void)
@@ -142,7 +142,7 @@ static void UnreadableChainIsTriedAgainLater(void)
     fp_body_tick(1, 1);
     CHECK_EQ(f.resolves, 2);
     CHECK_EQ(f.hides, 2);
-    CHECK_LOG("the cape is not found (the chain does not read)");
+    CHECK_LOG("the cape and helmet are not found (the chain does not read)");
 }
 
 static void NoCapeYetIsTriedAgainLater(void)
