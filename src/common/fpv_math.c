@@ -53,6 +53,14 @@ int fpv_pose_look(const float* keep, FpvVec3 position, FpvVec3 forward, FpvVec3 
     return 1;
 }
 
+int fpv_pose_blend(const float* from, const float* to, float t, float* out)
+{
+    FpvVec3 position = fpv_add(fpv_scale(fpv_pose_position(from), 1 - t), fpv_scale(fpv_pose_position(to), t));
+    FpvVec3 forward = fpv_add(fpv_scale(fpv_pose_forward(from), 1 - t), fpv_scale(fpv_pose_forward(to), t));
+    FpvVec3 up = fpv_add(fpv_scale(fpv_pose_up(from), 1 - t), fpv_scale(fpv_pose_up(to), t));
+    return fpv_pose_look(to, position, forward, up, out);
+}
+
 FpvVec3 fpv_pose_point(const float* pose, FpvVec3 local)
 {
     FpvVec3 p = fpv_pose_position(pose);

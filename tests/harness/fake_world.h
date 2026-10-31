@@ -30,6 +30,7 @@ typedef struct FakeUnit
     float local[FAKE_NODES][16];
     float world[FAKE_NODES][16];
     uint32_t names[FAKE_NODES];
+    float game[16];            /* the pose the game gives node 0 every frame (the render step puts it back) */
 } FakeUnit;
 
 extern FakeUnit fake_units[FAKE_UNITS];

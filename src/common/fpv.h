@@ -19,6 +19,7 @@ typedef struct FpvHost
     int (*read)(uintptr_t address, void* out, size_t size);              /* 1 read, 0 not */
     int (*code_matches)(uintptr_t address, const char* pattern);         /* 1 the unhooked bytes match */
     int (*hook)(uintptr_t target, const char* shipped, void* detour, void** original, int32_t priority); /* 1 hooked */
+    uint32_t (*game_state)(void);                                         /* HF_STATE_...; NULL in tests: a mission */
     uintptr_t exe_base;
     size_t exe_size;
     uintptr_t game_base;
@@ -26,8 +27,12 @@ typedef struct FpvHost
 } FpvHost;
 
 const FpvHost* fpv_host(void);
+/* The game is in a mission (HellForge's HF_STATE_MISSION): not the title, the ship, a loading screen or the screen after a
+ * mission. */
+int fpv_in_mission(void);
 #ifdef FPV_TEST
 FpvHost* fpv_host_for_test(void);
+void fpv_seconds_for_test(double seconds); /* fpv_seconds answers this from now on (below 0: the real clock again) */
 #endif
 
 void fpv_log(const char* feature, const char* format, ...);
@@ -63,6 +68,9 @@ FpvVec3 fpv_pose_position(const float* pose);
 /* The pose looking along `forward` with `up` as near as can be, at `position`; scale and the last float from `keep`
  * (a pose of the same unit). 0 when forward and up are parallel or zero (out is then a copy of keep). */
 int fpv_pose_look(const float* keep, FpvVec3 position, FpvVec3 forward, FpvVec3 up, float* out);
+/* The pose a fraction t (0..1) of the way from one pose to another: positions and axes mixed, the axes made square again
+ * (to's other floats kept). 0 when the mix has no direction (opposite poses at t = 0.5). */
+int fpv_pose_blend(const float* from, const float* to, float t, float* out);
 /* `local` (an offset in the pose's own frame: x right, y forward, z up) in world space. */
 FpvVec3 fpv_pose_point(const float* pose, FpvVec3 local);
 

@@ -86,6 +86,80 @@ static void NoHeadNoFirstPerson(void)
     CHECK_LOG("the Helldiver has no head node");
 }
 
+static uint32_t g_state;
+static uint32_t State(void) { return g_state; }
+
+static void OutsideAMissionIsNotOnFoot(void)
+{
+    void (*step)(void*) = Setup();
+    fake_add_unit(1, 1, 0, -1, 1.6f);        /* the screen after a mission: its camera near the head */
+    FakeUnit* diver = fake_add_unit(AVATAR, 0, 0, 0, 0);
+    fake_add_node(diver, "head", 0, 0, 1.6f);
+    fpv_host_for_test()->game_state = State;
+    g_state = 3;                             /* HF_STATE_SHIP */
+    step(NULL);
+    CHECK_EQ(fake_sets, 0);
+    CHECK_EQ(fp_view_situation(), 0);
+    g_state = 4;                             /* HF_STATE_MISSION */
+    step(NULL);
+    CHECK_EQ(fake_sets, 1);
+    fpv_host_for_test()->game_state = NULL;
+}
+
+/* Frames at 40 per second until `seconds` have passed. */
+static double Run(void (*step)(void*), double now, double seconds)
+{
+    for (double end = now + seconds; now < end - 1e-9;)
+    {
+        fpv_seconds_for_test(now += 0.025);
+        step(NULL);
+    }
+    return now;
+}
+
+static void SwitchingBlends(void)
+{
+    void (*step)(void*) = Setup();
+    fake_add_unit(1, 1, 0, -3, 2);
+    FakeUnit* diver = fake_add_unit(AVATAR, 0, 0, 0, 0);
+    fake_add_node(diver, "head", 0, 0, 1.6f);
+    double now = 100;
+    fpv_seconds_for_test(now);
+    step(NULL);                              /* the first frame: straight to the eye */
+    CHECK(Near(fake_set_pose[10], 0.12f));
+    uint32_t off = fp_view_request("test", FP_SITUATION_ON_FOOT, FP_VIEW_THIRD, 0);
+    now = Run(step, now, 0.125);             /* half the blend */
+    CHECK(fake_set_pose[10] < -1.0f && fake_set_pose[10] > -2.0f); /* between the eye (0.12) and the game's (-3) */
+    now = Run(step, now, 0.125);
+    int sets = fake_sets;
+    now = Run(step, now, 0.05);
+    CHECK_EQ(fake_sets, sets);               /* blended out: the game's own frame */
+    fp_view_release(off);
+    now = Run(step, now, 0.025);
+    CHECK(fake_set_pose[10] < -2.5f);        /* coming back in, near the game's still */
+    Run(step, now, 0.25);
+    CHECK(Near(fake_set_pose[10], 0.12f));
+    fpv_seconds_for_test(-1);
+}
+
+static void EyeIsSteadied(void)
+{
+    void (*step)(void*) = Setup();
+    fake_add_unit(1, 1, 0, -3, 2);
+    FakeUnit* diver = fake_add_unit(AVATAR, 0, 0, 0, 0);
+    fake_add_node(diver, "head", 0, 0, 1.6f);
+    double now = 100;
+    fpv_seconds_for_test(now);
+    step(NULL);
+    diver->world[1][14] = 1.65f;                         /* a bob: the eye follows part of it in a frame */
+    fpv_seconds_for_test(now += 1.0 / 60);
+    step(NULL);
+    CHECK(fake_set_pose[11] > 1.661f && fake_set_pose[11] < 1.69f);
+    for (int i = 0; i < 60; i++) { fpv_seconds_for_test(now += 1.0 / 60); step(NULL); }
+    CHECK(Near(fake_set_pose[11], 1.71f));   /* and all of it once it stays */
+    fpv_seconds_for_test(-1);
+}
+
 static void HelldiverArrivingLaterIsFound(void)
 {
     void (*step)(void*) = Setup();
@@ -106,5 +180,8 @@ int main(void)
     RUN(DestroyedHelldiverIsNoticed);
     RUN(NoHeadNoFirstPerson);
     RUN(HelldiverArrivingLaterIsFound);
+    RUN(OutsideAMissionIsNotOnFoot);
+    RUN(SwitchingBlends);
+    RUN(EyeIsSteadied);
     TEST_END();
 }

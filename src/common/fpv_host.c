@@ -73,8 +73,16 @@ int fpv_read(uintptr_t address, void* out, size_t size)
     return g_host.read != NULL && address != 0 && g_host.read(address, out, size);
 }
 
+#ifdef FPV_TEST
+static double g_testSeconds = -1;
+void fpv_seconds_for_test(double seconds) { g_testSeconds = seconds; }
+#endif
+
 double fpv_seconds(void)
 {
+#ifdef FPV_TEST
+    if (g_testSeconds >= 0) return g_testSeconds;
+#endif
     static LARGE_INTEGER frequency;
     LARGE_INTEGER now;
     if (frequency.QuadPart == 0) QueryPerformanceFrequency(&frequency);
@@ -92,6 +100,13 @@ int fpv_exe_hook(uint32_t rva, const char* shipped, void* detour, void** origina
 {
     if (g_host.hook == NULL || g_host.exe_base == 0 || rva >= g_host.exe_size || original == NULL) return 0;
     return g_host.hook(g_host.exe_base + rva, shipped, detour, original, priority);
+}
+
+static uint32_t HostGameState(void) { return g_api->game_state(g_mod); }
+
+int fpv_in_mission(void)
+{
+    return g_host.game_state == NULL || g_host.game_state() == HF_STATE_MISSION;
 }
 
 /* ---- init -------------------------------------------------------------------------------------------------------- */
@@ -113,6 +128,7 @@ static const char* MissingMember(const HfApi* api)
     FPV_NEED(read);
     FPV_NEED(code_matches);
     FPV_NEED(hook_ex);
+    FPV_NEED(game_state);
 #undef FPV_NEED
     return NULL;
 }
@@ -145,6 +161,7 @@ int fpv_host_init(const HfApi* api, HfMod* mod)
     g_host.read = HostRead;
     g_host.code_matches = HostCodeMatches;
     g_host.hook = HostHook;
+    g_host.game_state = HostGameState;
     g_host.exe_base = api->module_base("helldivers2.exe", &g_host.exe_size);
     g_host.game_base = api->module_base("game.dll", &g_host.game_size);
     return 1;

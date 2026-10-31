@@ -5,12 +5,19 @@
  * frame there (same Unit*, reference and resource), so a destroyed Helldiver is noticed without calling the engine with
  * a stale reference; looked for again every 30 frames while there is none.
  *
- * The situation: on foot while the game's camera is within FP_ON_FOOT_RANGE of the head (its over-the-shoulder camera);
- * anything else (vehicles, the hellpod, cutscenes, the map) is not known yet and stays third person.
+ * The situation: on foot in a mission while the game's camera is within FP_ON_FOOT_RANGE of the head (its
+ * over-the-shoulder camera); anything else (vehicles, the hellpod, cutscenes, the map) is not known yet and stays third
+ * person. Outside a mission (the ship, the screen after a mission, whose camera can sit near the head) it is never on
+ * foot.
  *
- * The eye is the head node plus FP_EYE_FORWARD along the view and FP_EYE_UP. The view turns from there to where the
- * game's own line of fire hits (fp_aim.c), so the screen's centre is where shots land; without that, it keeps the game
- * camera's direction.
+ * The eye is the head node plus FP_EYE_FORWARD along the view and FP_EYE_UP, steadied: the head's place relative to the
+ * Helldiver's root (node 0) is smoothed (FP_EYE_RATE), so the walk's bob and sway are softened while the root carries
+ * the eye along at once, and crouching or going prone still lowers it within a tenth of a second. The view turns from
+ * there to where the game's own line of fire hits (fp_aim.c), so the screen's centre is where shots land; without
+ * that, it keeps the game camera's direction.
+ *
+ * Switching between the views (on foot or not, the player's toggle, a mod's request) blends over FP_BLEND_SECONDS: the
+ * frame's pose is mixed between the game's and First Person's.
  *
  * Cost per frame: about ten reads; the search (every unit's resource) only while no Helldiver is known.
  */
@@ -24,6 +31,8 @@
 #define FP_ON_FOOT_RANGE 6.0f
 #define FP_EYE_FORWARD 0.12f
 #define FP_EYE_UP 0.06f
+#define FP_EYE_RATE 12.0f       /* per second: how fast the steadied eye follows the head */
+#define FP_BLEND_SECONDS 0.25f
 
 static struct
 {
@@ -32,6 +41,8 @@ static struct
     int32_t head;
     int wait;
     int active;          /* last frame's view was First Person's */
+    float blend;         /* 0 the game's view .. 1 First Person's */
+    FpvVec3 offset;      /* the steadied head, relative to the root */
     int loggedHead;
     int searches;        /* searches that found no Helldiver, logged for the first FP_SEARCHES_LOGGED */
     double last;         /* the last filtered frame's time */
@@ -100,13 +111,15 @@ static void Search(uintptr_t world, FpvVec3 camera)
             count, avatars, nearestSq < 0 ? -1.0f : sqrtf(nearestSq), camera.x, camera.y, camera.z);
 }
 
-/* The head's world position, or 0 when it cannot be read. */
-static int Head(FpvVec3* out)
+/* The head's and the root's world positions, or 0 when they cannot be read. */
+static int Head(FpvVec3* head, FpvVec3* root)
 {
-    float m[16];
-    if (!fpv_unit_world_pose(g.unit, g.head, m) || !isfinite(m[12]) || !isfinite(m[13]) || !isfinite(m[14])) return 0;
-    *out = fpv_v3(m[12], m[13], m[14]);
-    return 1;
+    float m[16], r[16];
+    if (!fpv_unit_world_pose(g.unit, g.head, m) || !fpv_unit_world_pose(g.unit, 0, r)) return 0;
+    *head = fpv_v3(m[12], m[13], m[14]);
+    *root = fpv_v3(r[12], r[13], r[14]);
+    return isfinite(head->x) && isfinite(head->y) && isfinite(head->z) && isfinite(root->x) && isfinite(root->y) &&
+        isfinite(root->z);
 }
 
 static void Say(int active)
@@ -116,48 +129,67 @@ static void Say(int active)
     fpv_log("camera", active ? "first person" : "third person");
 }
 
+/* Keeps the Helldiver found (looking again every FP_SEARCH_FRAMES while there is none): 1 while there is one. */
+static int Keep(uintptr_t world, FpvVec3 camera)
+{
+    if (StillThere(world)) return 1;
+    g.unit = 0;
+    if (g.wait > 0) { g.wait--; return 0; }
+    Search(world, camera);
+    if (g.unit == 0) g.wait = FP_SEARCH_FRAMES;
+    return g.unit != 0;
+}
+
+static float Follow(float rate, float dt) { return 1.0f - expf(-rate * dt); }
+
+/* First Person's pose for this frame, from the game's: the steadied eye, looking where the game aims. */
+static void FirstPersonPose(const float* game, FpvVec3 head, FpvVec3 root, int fresh, float dt, float* out)
+{
+    FpvVec3 offset = fpv_sub(head, root);
+    if (fresh) g.offset = offset;
+    else g.offset = fpv_add(g.offset, fpv_scale(fpv_sub(offset, g.offset), Follow(FP_EYE_RATE, dt)));
+    FpvVec3 steady = fpv_add(root, g.offset), forward = fpv_pose_forward(game), aimed;
+    FpvVec3 eye = fpv_add(steady, fpv_scale(forward, FP_EYE_FORWARD));
+    eye.z += FP_EYE_UP;
+    if (fp_aim_forward(game, eye, steady, dt, &aimed) && fpv_pose_look(game, eye, aimed, fpv_v3(0, 0, 1), out)) return;
+    memcpy(out, game, 16 * sizeof(float));
+    out[9] = eye.x;
+    out[10] = eye.y;
+    out[11] = eye.z;
+}
+
+/* The blend moved a frame towards the view in use. */
+static float Blend(float blend, int active, float dt)
+{
+    float step = dt / FP_BLEND_SECONDS;
+    if (dt <= 0) step = 1;  /* the first frame: no time yet, no blend */
+    blend += active ? step : -step;
+    return blend < 0 ? 0 : blend > 1 ? 1 : blend;
+}
+
 int fp_camera_filter(float* pose, void* context)
 {
 #ifdef FPV_PROBE
     fp_probe_tick();
 #endif
-    uintptr_t world = fpv_camera_world();
-    FpvVec3 camera = fpv_pose_position(pose), head;
-    if (!StillThere(world))
-    {
-        g.unit = 0;
-        if (g.wait > 0) g.wait--;
-        else
-        {
-            Search(world, camera);
-            if (g.unit == 0) g.wait = FP_SEARCH_FRAMES;
-        }
-    }
-    if (g.unit == 0 || !Head(&head))
-    {
-        fp_view_set_situation(0);
-        Say(0);
-        return 0;
-    }
-    FpvVec3 d = fpv_sub(head, camera);
-    fp_view_set_situation(fpv_dot(d, d) < FP_ON_FOOT_RANGE * FP_ON_FOOT_RANGE ? FP_SITUATION_ON_FOOT : 0);
-    int active = fp_view_active();
-    Say(active);
-    if (!active) return 0;
     double now = fpv_seconds();
     float dt = g.last > 0 && now > g.last ? (float)(now - g.last) : 0;
+    if (dt > 0.1f) dt = 0.1f;  /* a hitch, or the first frame back: no big jumps */
     g.last = now;
-    FpvVec3 forward = fpv_pose_forward(pose), eye = fpv_add(head, fpv_scale(forward, FP_EYE_FORWARD)), aimed;
-    eye.z += FP_EYE_UP;
+    FpvVec3 camera = fpv_pose_position(pose), head, root;
+    int known = Keep(fpv_camera_world(), camera) && Head(&head, &root);
+    FpvVec3 d = known ? fpv_sub(head, camera) : fpv_v3(0, 0, 0);
+    int onFoot = known && fpv_in_mission() && fpv_dot(d, d) < FP_ON_FOOT_RANGE * FP_ON_FOOT_RANGE;
+    fp_view_set_situation(onFoot ? FP_SITUATION_ON_FOOT : 0);
+    int active = known && fp_view_active();
+    Say(active);
+    int fresh = g.blend <= 0;
+    g.blend = known ? Blend(g.blend, active, dt) : 0;
+    if (g.blend <= 0) return 0;
     float game[16], view[16];
     memcpy(game, pose, sizeof game);
-    if (fp_aim_forward(game, eye, head, dt, &aimed) && fpv_pose_look(game, eye, aimed, fpv_v3(0, 0, 1), view))
-    {
-        memcpy(pose, view, sizeof view);
-        return 1;
-    }
-    pose[9] = eye.x;
-    pose[10] = eye.y;
-    pose[11] = eye.z;
+    FirstPersonPose(game, head, root, fresh, dt, view);
+    float t = g.blend * g.blend * (3 - 2 * g.blend);
+    if (t >= 1 || !fpv_pose_blend(game, view, t, pose)) memcpy(pose, view, sizeof view);
     return 1;
 }

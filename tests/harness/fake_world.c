@@ -16,7 +16,13 @@ static uint32_t g_count;
 
 static int Cameras(uintptr_t unit) { return ((FakeUnit*)unit)->cameras; }
 static uintptr_t Graph(uintptr_t unit) { return (uintptr_t)&((FakeUnit*)unit)->graph; }
-static void Step(void* app) { fake_steps++; }
+/* The frame renders, then the game moves its camera again for the next one: node 0 back to the game's pose. */
+static void Step(void* app)
+{
+    fake_steps++;
+    for (int i = 0; i < FAKE_UNITS; i++)
+        if (fake_units[i].ref != 0) memcpy(fake_units[i].local[0], fake_units[i].game, sizeof fake_units[i].game);
+}
 static void Update(uintptr_t world, uintptr_t unit) { fake_updates++; }
 static uintptr_t World(void) { return (uintptr_t)g_world; }
 
@@ -97,6 +103,7 @@ FakeUnit* fake_add_unit(uint64_t resource, int cameras, float x, float y, float 
     unit->local[0][11] = z;
     unit->local[0][12] = unit->local[0][13] = unit->local[0][14] = 1;
     unit->local[0][15] = 0;
+    memcpy(unit->game, unit->local[0], sizeof unit->game);
     Pose(unit->world[0], x, y, z);
     unit->world[0][12] = x;
     unit->world[0][13] = y;
