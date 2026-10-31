@@ -1,7 +1,8 @@
 /* First Person's camera filter: the camera at the local Helldiver's eyes, facing where the game's camera faces.
  *
- * The Helldiver: the main world's unit of resource 0x4D1C334D294DFA97 nearest the game's camera (the camera follows the
- * local player's Helldiver; fpv_units.c has the layout). Kept by its place in the world's unit array and checked every
+ * The Helldiver: the main world's unit of resource 0x4D1C334D294DFA97 nearest the game's camera and in front of it (the
+ * camera follows the local player's Helldiver and looks over its shoulder, so a teammate standing behind the camera,
+ * nearer than ours, is not taken; one behind counts only when none is in front; fpv_units.c has the layout). Kept by its place in the world's unit array and checked every
  * frame there (same Unit*, reference and resource), so a destroyed Helldiver is noticed without calling the engine with
  * a stale reference; looked for again every 30 frames while there is none.
  *
@@ -70,14 +71,16 @@ static int StillThere(uintptr_t world)
         fpv_unit_ref(g.unit) == g.ref && fpv_unit_resource(g.unit) == FP_AVATAR;
 }
 
-/* 0: not a Helldiver; 1: a Helldiver whose root does not read; 2: one at *sq (squared metres) from the camera. */
-static int AvatarDistance(uintptr_t unit, FpvVec3 camera, float* sq)
+/* 0: not a Helldiver; 1: a Helldiver whose root does not read; 2: one at *sq (squared metres) from the camera, *behind
+ * set when it is behind the camera's view. */
+static int AvatarDistance(uintptr_t unit, const float* camera, float* sq, int* behind)
 {
     float root[16];
     if (unit == 0 || fpv_unit_resource(unit) != FP_AVATAR) return 0;
     if (!fpv_unit_world_pose(unit, 0, root)) return 1;
-    FpvVec3 d = fpv_sub(fpv_v3(root[12], root[13], root[14]), camera);
+    FpvVec3 d = fpv_sub(fpv_v3(root[12], root[13], root[14]), fpv_pose_position(camera));
     *sq = fpv_dot(d, d);
+    *behind = fpv_dot(d, fpv_pose_forward(camera)) < 0;
     return 2;
 }
 
@@ -90,26 +93,40 @@ static void Take(float distanceSq)
     fpv_log("camera", "the Helldiver: unit %u, head node %d, %.2f m from the camera", g.ref, g.head, sqrtf(distanceSq));
 }
 
-static void Search(uintptr_t world, FpvVec3 camera)
+/* The search's best so far. */
+typedef struct Best
+{
+    float score, sq, nearestSq;
+    uint32_t avatars;
+} Best;
+
+/* Weighs the unit at index i against the best so far (g.unit, g.index). */
+static void Weigh(uintptr_t unit, uint32_t i, const float* pose, Best* best)
+{
+    float sq = 0, range = FP_SEARCH_RANGE * FP_SEARCH_RANGE;
+    int behind = 0, kind = AvatarDistance(unit, pose, &sq, &behind);
+    best->avatars += kind != 0;
+    if (kind != 2) return;
+    if (best->nearestSq < 0 || sq < best->nearestSq) best->nearestSq = sq;
+    float score = sq + (behind ? 2 * range : 0);  /* any in front before any behind */
+    if (sq >= range || (g.unit != 0 && score >= best->score)) return;
+    best->score = score;
+    best->sq = sq;
+    g.unit = unit;
+    g.index = i;
+}
+
+static void Search(uintptr_t world, const float* pose)
 {
     g.unit = 0;
     g.world = world;
     uintptr_t units;
-    uint32_t count = fpv_world_units(world, &units), avatars = 0;
-    float bestSq = FP_SEARCH_RANGE * FP_SEARCH_RANGE, nearestSq = -1;
-    for (uint32_t i = 0; i < count; i++)
-    {
-        uintptr_t unit = fpv_world_unit(units, i);
-        float sq = 0;
-        int kind = AvatarDistance(unit, camera, &sq);
-        avatars += kind != 0;
-        if (kind != 2) continue;
-        if (nearestSq < 0 || sq < nearestSq) nearestSq = sq;
-        if (sq >= bestSq) continue;
-        bestSq = sq;
-        g.unit = unit;
-        g.index = i;
-    }
+    uint32_t count = fpv_world_units(world, &units);
+    Best best = {0, 0, -1, 0};
+    for (uint32_t i = 0; i < count; i++) Weigh(fpv_world_unit(units, i), i, pose, &best);
+    uint32_t avatars = best.avatars;
+    float bestSq = best.sq, nearestSq = best.nearestSq;
+    FpvVec3 camera = fpv_pose_position(pose);
     if (g.unit != 0) { Take(bestSq); return; }
     if (g.searches++ < FP_SEARCHES_LOGGED)
         fpv_log("camera", "no Helldiver near the camera: %u units, %u Helldivers, the nearest %.1f m away (camera at %.1f %.1f %.1f)",
@@ -140,12 +157,12 @@ static void Say(int active, int known, int mission, float distance)
 }
 
 /* Keeps the Helldiver found (looking again every FP_SEARCH_FRAMES while there is none): 1 while there is one. */
-static int Keep(uintptr_t world, FpvVec3 camera)
+static int Keep(uintptr_t world, const float* pose)
 {
     if (StillThere(world)) return 1;
     g.unit = 0;
     if (g.wait > 0) { g.wait--; return 0; }
-    Search(world, camera);
+    Search(world, pose);
     if (g.unit == 0) g.wait = FP_SEARCH_FRAMES;
     return g.unit != 0;
 }
@@ -194,7 +211,7 @@ int fp_camera_filter(float* pose, void* context)
     if (dt > 0.1f) dt = 0.1f;  /* a hitch, or the first frame back: no big jumps */
     g.last = now;
     FpvVec3 camera = fpv_pose_position(pose), head, root;
-    int known = Keep(fpv_camera_world(), camera) && Head(&head, &root);
+    int known = Keep(fpv_camera_world(), pose) && Head(&head, &root);
     FpvVec3 d = known ? fpv_sub(head, camera) : fpv_v3(0, 0, 0);
     int mission = fpv_in_mission();
     int onFoot = known && mission && fpv_dot(d, d) < FP_ON_FOOT_RANGE * FP_ON_FOOT_RANGE;

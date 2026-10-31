@@ -38,6 +38,19 @@ static void CameraGoesToTheHead(void)
     CHECK_EQ(fp_view_active(), 1);
 }
 
+static void TeammateBehindTheCameraIsNotTaken(void)
+{
+    void (*step)(void*) = Setup();
+    fake_add_unit(1, 1, 0, -3, 2);           /* the camera, looking +Y */
+    FakeUnit* mate = fake_add_unit(AVATAR, 0, 0, -4, 0); /* a teammate just behind it, nearer than ours */
+    fake_add_node(mate, "head", 0, -4, 1.6f);
+    FakeUnit* diver = fake_add_unit(AVATAR, 0, 0.5f, 0, 0);
+    fake_add_node(diver, "head", 0.5f, 0, 1.6f);
+    step(NULL);
+    CHECK_LOG("the Helldiver: unit 102");
+    CHECK(Near(fake_set_pose[9], 0.5f));
+}
+
 static void FarCameraIsNotOnFoot(void)
 {
     void (*step)(void*) = Setup();
@@ -197,6 +210,7 @@ static void HelldiverArrivingLaterIsFound(void)
 int main(void)
 {
     RUN(CameraGoesToTheHead);
+    RUN(TeammateBehindTheCameraIsNotTaken);
     RUN(FarCameraIsNotOnFoot);
     RUN(SwitchedOffStaysThirdPerson);
     RUN(DestroyedHelldiverIsNoticed);
