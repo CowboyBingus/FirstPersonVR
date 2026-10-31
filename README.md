@@ -12,6 +12,8 @@ Both change your own view only, so friends and lobbies do not need them.
 The mods are in progress. First Person, on foot in missions (seen in game 2026-10-31):
 
 - The camera at the Helldiver's eyes, steadied so running does not bob the view, down to the ground when prone.
+- Your cape is hidden while you look through your Helldiver's eyes (it hung in the view looking down), and shown
+  again in third person. A cape hidden by another mod stays hidden.
 - Shots land at the centre of the screen: aiming shows the weapon and the game's reticle there.
 - The game's own first-person aim (middle mouse while aiming: sights and scopes) is kept, and First Person comes back
   when the aim ends.

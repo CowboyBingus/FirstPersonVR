@@ -59,6 +59,26 @@ typedef int (*FpAimRaycast)(uint32_t query, const float* from, const float* dir,
 void fp_aim_set_for_test(FpAimRaycast raycast, uint32_t query);
 #endif
 
+/* The body (fp_body.c): the Helldiver's capes hidden while `hide`, shown again after (or when ref changes). Once a
+ * frame with the Helldiver's unit reference (0: none). */
+#define FP_BODY_CAPES 3
+void fp_body_reset(void);
+void fp_body_tick(uint32_t ref, int hide);
+int fp_body_hidden(void);
+typedef struct FpBodyFns
+{
+    uint8_t (*alive)(uint32_t unit);
+    uint32_t (*meshes)(uint32_t unit);
+    uintptr_t (*mesh)(uint32_t unit, uint32_t index);
+    void (*visibility)(uint32_t unit, uint32_t visible, uint8_t children);
+    /* the Helldiver's cape units and first meshes: how many, or -1 with *why */
+    int (*capes)(uint32_t ref, uint32_t* units, uintptr_t* meshes, int max, const char** why);
+    int (*mask)(uintptr_t mesh, uint8_t* mask);  /* a mesh's visibility mask: 1 read */
+} FpBodyFns;
+#ifdef FPV_TEST
+void fp_body_set_for_test(const FpBodyFns* fns);
+#endif
+
 /* The camera filter (fp_camera.c): the camera at the Helldiver's eyes while the view is First Person's. */
 void fp_camera_reset(void);
 int fp_camera_filter(float* pose, void* context);

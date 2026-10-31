@@ -27,9 +27,10 @@ says what that covers and what only a tester can check.
 2. **The camera on the head** (done, live). The camera at the head node, 0.12 m forward and 0.06 m up, facing where
    the game's camera faces, so the direction the game aims along is unchanged. Third person again when the Helldiver
    dies (the game's camera moves away from the head).
-3. **No head in the view.** The helmet, head and cape meshes hidden for the local player's camera only
-   (Unit.set_mesh_visibility, proved by Difficulty 11 Plus), shown again when first person turns off. Shadows keep them if
-   the engine allows it.
+3. **No head in the view** (cape done, live). The eye's place keeps the helmet and head out of the view. The capes are
+   hidden while the view is First Person's and shown again after (the engine's set_unit_visibility, as Vanilla Plus
+   Megapack's Hide Cape does it; fp_body.c). The cape's shadow goes with it. Still to try: a per-viewport or shadow-only
+   visibility, so the shadow stays.
 4. **The near plane and field of view.** Camera.set_near_range and set_vertical_fov (or their fields), so the weapon and
    arms do not clip.
 5. **Aim** (done, live). The view turns from the eye to where the game's own line of fire hits (one damage line of sight

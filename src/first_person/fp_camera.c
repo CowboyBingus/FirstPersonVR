@@ -28,7 +28,8 @@
  * it, and comes back when the aim ends.
  *
  * Switching between the views (on foot or not, the player's toggle, a mod's request) blends over FP_BLEND_SECONDS: the
- * frame's pose is mixed between the game's and First Person's.
+ * frame's pose is mixed between the game's and First Person's. The Helldiver's capes are hidden while the blend is past
+ * half way (fp_body.c).
  *
  * Cost per frame: about ten reads; the search (every unit's resource) only while no Helldiver is known.
  */
@@ -257,6 +258,7 @@ int fp_camera_filter(float* pose, void* context)
     int sights = fpv_dot(d, d) < FP_GAME_SIGHTS * FP_GAME_SIGHTS;
     int fresh = g.blend <= 0;
     g.blend = known ? Blend(g.blend, active && !sights, dt) : 0;
+    fp_body_tick(known ? g.ref : 0, g.blend > 0.5f);
     if (g.blend <= 0) return 0;
     float game[16], view[16];
     memcpy(game, pose, sizeof game);

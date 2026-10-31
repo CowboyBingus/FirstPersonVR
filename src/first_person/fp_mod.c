@@ -26,6 +26,7 @@ HF_MOD_EXPORT int hellforge_mod_init(const HfApi* api, HfMod* mod)
     fp_view_reset();
     fp_camera_reset();
     fp_aim_reset();
+    fp_body_reset();
     if (!fpv_host_init(api, mod)) return 1;
     fp_options_load();
     fp_options_apply();

@@ -95,8 +95,8 @@ What the mods rely on, and how each fact was established. "Live" means read in t
 - The diver faces where it runs, not where the camera looks: strafing, running diagonally or back towards the camera,
   and standing still after a quick turn all leave the body turned from the view. Looking down then showed the shoulder
   armour, the back or the backpack until the eye went further out along the view (fp_camera.c).
-- The cape still shows looking down while running back or sideways, and across the top of the view during a dive: it
-  hangs where the eye goes. It needs hiding, not a camera move.
+- The cape showed looking down while running back or sideways, and across the top of the view during a dive: it hangs
+  where the eye goes. It is hidden in first person now (below).
 - A dead Helldiver's body stays in the world as the same unit; the reinforcement is another unit.
 - Mesh visibility: exe+0x200CF0 (the Unit C API's +432) only looks a mesh up (Unit vtable +0x118: a name or index to
   the mesh's index). The Lua binding Unit.set_mesh_visibility (exe+0x4128E0, a thunk to the body at exe+0x4124D0)
@@ -104,6 +104,25 @@ What the mods rely on, and how each fact was established. "Live" means read in t
   in. Not found yet: the setter itself. Setting a node's local scale once from Lua (cape1 node 35, backpack node 30 of
   the Helldiver) changed nothing on screen: the animation writes those poses every frame, or the cape is skinned to an
   armour unit's own bones.
+
+## The cape (live 2026-10-31)
+
+- A cape is a unit of its own. The local player's Helldiver: the player manager `game.dll+0x3326468` (count +132, entity
+  records +232 + 8 * i, bit 0 of a record's +20 set for this machine's player, its id +8; the map +208 from that id to
+  the player's index; +936 + 32 * index). That value (0x137 live) is the entities map's key, not an engine unit
+  reference: the entities `game.dll+0x346BF98` (map +0xF22EC8 to the entity's index, 24-byte records at +0xF32F18: the
+  avatar resource, the avatar id +8), the avatars `game.dll+0x3326D20` (map +248, count +0x6C, 440-byte records at
+  +5532272), and three arrays of 10 unit references at a record's +220. Those references are the engine's (0x400054
+  numbering, the same as `Unit + 8`); slot 1 of each array is a cape (one worn live: array 0's). Chain from Vanilla Plus
+  Megapack's Match Your Colors (myc_avatar.c).
+- Hidden with the script C API's Unit table (`[game.dll+0x3326308] + 24`): slot +1624 = exe+0x205680
+  `set_unit_visibility(unit, visible, children)`; +1824 alive, +424 mesh count, +440 mesh. A mesh's visibility mask is
+  at Mesh +0xDC (0 hidden). Live: hidden in every movement looking down and through dives, shown again when the game's
+  own scope took over, hidden again after.
+- The cape is Havok Cloth: the exe has `hclClothInstance`, `hclSimClothInstance`, `hclCollidable` and a Havok Cloth
+  licence for Helldivers 2. No script binding reaches the cloth. Its clipping in third person (through the legs, the
+  backpack) comes from the collidables the cloth simulates against, so a fix there is inside Havok's objects.
+  game.dll has `cape_velocity` and `cape_velocity_change`.
 
 ## Cautions
 
