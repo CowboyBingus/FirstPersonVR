@@ -10,7 +10,7 @@
  * person. Outside a mission (the ship, the screen after a mission, whose camera can sit near the head) it is never on
  * foot.
  *
- * The eye is the head node plus FP_EYE_FORWARD along the view and FP_EYE_UP, steadied: the head's place relative to the
+ * The eye is the head node plus the options' eye_forward along the view and eye_up (0.12 m and 0.06 m), steadied: the head's place relative to the
  * Helldiver's root (node 0) is smoothed, so the run's bob and sway are softened while the root carries the eye along at
  * once. Measured live: jogging bobs the head 13-24 cm at about 2 Hz; the height follows at FP_EYE_RATE_UP (a third of
  * that bob is left), the rest at FP_EYE_RATE. Crouching or going prone still lowers the eye within a fifth of a second. The view turns from
@@ -34,8 +34,6 @@
 #define FP_SEARCH_FRAMES 30
 #define FP_SEARCH_RANGE 12.0f   /* a Helldiver farther from the camera is someone else's */
 #define FP_ON_FOOT_RANGE 6.0f
-#define FP_EYE_FORWARD 0.12f
-#define FP_EYE_UP 0.06f
 #define FP_EYE_RATE 10.0f       /* per second: how fast the steadied eye follows the head, sideways and fore and aft */
 #define FP_EYE_RATE_UP 5.0f     /* and up and down */
 #define FP_BLEND_SECONDS 0.25f
@@ -129,11 +127,16 @@ static int Head(FpvVec3* head, FpvVec3* root)
         isfinite(root->z);
 }
 
-static void Say(int active)
+/* Logs a switch, with why it is third person. */
+static void Say(int active, int known, int mission, float distance)
 {
     if (active == g.active) return;
     g.active = active;
-    fpv_log("camera", active ? "first person" : "third person");
+    if (active) fpv_log("camera", "first person");
+    else if (!known) fpv_log("camera", "third person: the Helldiver is not known");
+    else if (!mission) fpv_log("camera", "third person: not in a mission");
+    else if (distance >= FP_ON_FOOT_RANGE) fpv_log("camera", "third person: the game's camera is %.1f m from the head", distance);
+    else fpv_log("camera", "third person: the player's setting or a mod's request");
 }
 
 /* Keeps the Helldiver found (looking again every FP_SEARCH_FRAMES while there is none): 1 while there is one. */
@@ -162,8 +165,8 @@ static void FirstPersonPose(const float* game, FpvVec3 head, FpvVec3 root, int f
         g.offset.z += (offset.z - g.offset.z) * Follow(FP_EYE_RATE_UP, dt);
     }
     FpvVec3 steady = fpv_add(root, g.offset), forward = fpv_pose_forward(game), aimed;
-    FpvVec3 eye = fpv_add(steady, fpv_scale(forward, FP_EYE_FORWARD));
-    eye.z += FP_EYE_UP;
+    FpvVec3 eye = fpv_add(steady, fpv_scale(forward, fp_options()->eye_forward));
+    eye.z += fp_options()->eye_up;
     if (fp_aim_forward(game, eye, steady, dt, &aimed) && fpv_pose_look(game, eye, aimed, fpv_v3(0, 0, 1), out)) return;
     memcpy(out, game, 16 * sizeof(float));
     out[9] = eye.x;
@@ -185,6 +188,7 @@ int fp_camera_filter(float* pose, void* context)
 #ifdef FPV_PROBE
     fp_probe_tick();
 #endif
+    fp_options_tick();
     double now = fpv_seconds();
     float dt = g.last > 0 && now > g.last ? (float)(now - g.last) : 0;
     if (dt > 0.1f) dt = 0.1f;  /* a hitch, or the first frame back: no big jumps */
@@ -192,10 +196,11 @@ int fp_camera_filter(float* pose, void* context)
     FpvVec3 camera = fpv_pose_position(pose), head, root;
     int known = Keep(fpv_camera_world(), camera) && Head(&head, &root);
     FpvVec3 d = known ? fpv_sub(head, camera) : fpv_v3(0, 0, 0);
-    int onFoot = known && fpv_in_mission() && fpv_dot(d, d) < FP_ON_FOOT_RANGE * FP_ON_FOOT_RANGE;
+    int mission = fpv_in_mission();
+    int onFoot = known && mission && fpv_dot(d, d) < FP_ON_FOOT_RANGE * FP_ON_FOOT_RANGE;
     fp_view_set_situation(onFoot ? FP_SITUATION_ON_FOOT : 0);
     int active = known && fp_view_active();
-    Say(active);
+    Say(active, known, mission, sqrtf(fpv_dot(d, d)));
     int sights = fpv_dot(d, d) < FP_GAME_SIGHTS * FP_GAME_SIGHTS;
     int fresh = g.blend <= 0;
     g.blend = known ? Blend(g.blend, active && !sights, dt) : 0;

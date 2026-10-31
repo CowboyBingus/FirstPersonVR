@@ -16,6 +16,27 @@ typedef struct FpSettings
     uint32_t first_in;      /* FP_SITUATION_... bits that are first person without a request */
 } FpSettings;
 
+/* The player's options file (fp_options.c): the view settings, the toggle key and the eye's place. */
+typedef struct FpOptions
+{
+    FpSettings settings;
+    uint32_t toggle_key;    /* a Windows virtual-key code; 0: none */
+    float eye_forward, eye_up;
+} FpOptions;
+
+void fp_options_defaults(FpOptions* options);
+/* Reads `key = value` lines into options (defaults kept for what is not understood); returns the lines not understood. */
+int fp_options_parse(const char* text, FpOptions* options);
+int fp_options_key(const char* name, uint32_t* vk);
+void fp_options_load(void);   /* the file, or the defaults (written as the file when there is none) */
+void fp_options_apply(void);  /* hands the settings to the view decision */
+void fp_options_tick(void);   /* once a frame: the toggle key */
+const FpOptions* fp_options(void);
+const char* fp_options_default_text(void); /* the file written when there is none */
+#ifdef FPV_TEST
+void fp_options_set_key_for_test(int down);
+#endif
+
 void fp_view_reset(void);
 void fp_view_settings(const FpSettings* settings);
 uint32_t fp_view_request(const char* owner, uint32_t situations, uint32_t view, int32_t priority);
