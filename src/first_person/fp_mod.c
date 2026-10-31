@@ -14,6 +14,7 @@ HF_MOD_EXPORT const FirstPersonApi* first_person_get_api(uint32_t version)
 /* The exe's code reads as shipped only once the game has loaded (HellForge's own exe hooks wait for it too). */
 static void OnGameLoaded(HfMod* mod, HfEvent event, void* user)
 {
+    fpv_host_modules();
     if (fpv_camera_install(FPV_PRIORITY_FIRST_PERSON)) fpv_camera_set_filter(fp_camera_filter, NULL);
 #ifdef FPV_PROBE
     fp_probe_install();

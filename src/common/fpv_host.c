@@ -150,5 +150,12 @@ int fpv_host_init(const HfApi* api, HfMod* mod)
     return 1;
 }
 
+void fpv_host_modules(void)
+{
+    if (g_api == NULL) return;
+    g_host.exe_base = g_api->module_base("helldivers2.exe", &g_host.exe_size);
+    g_host.game_base = g_api->module_base("game.dll", &g_host.game_size);
+}
+
 const HfApi* fpv_api(void) { return g_api; }
 HfMod* fpv_mod(void) { return g_mod; }

@@ -44,24 +44,31 @@ void fp_aim_reset(void)
     memset(&g, 0, sizeof g);
 }
 
+/* Why the raycast cannot be used, or NULL when it can (g.raycast set). */
+static const char* Check(void)
+{
+    const FpvHost* host = fpv_host();
+    uintptr_t physics = 0, slot = 0;
+    if (host->game_base == 0) return "game.dll was not found";
+    if (!fpv_exe_matches(AIM_RAYCAST, kRaycast)) return "the raycast's code differs";
+    if (!fpv_read(host->game_base + AIM_PHYSICS, &physics, sizeof physics) || physics == 0)
+        return "no physics interface";
+    if (!fpv_read(physics + AIM_PHYSICS_SLOT, &slot, sizeof slot) || slot != host->exe_base + AIM_RAYCAST)
+        return "the physics interface's ray is another function";
+    g.raycast = (RaycastFn)slot;
+    return NULL;
+}
+
 static int Ready(void)
 {
     if (g.state != 0) return g.state == 1;
-    g.state = -1;
-    const FpvHost* host = fpv_host();
-    uintptr_t physics = 0, slot = 0;
-    if (host->game_base == 0 || !fpv_exe_matches(AIM_RAYCAST, kRaycast) ||
-        !fpv_read(host->game_base + AIM_PHYSICS, &physics, sizeof physics) || physics == 0 ||
-        !fpv_read(physics + AIM_PHYSICS_SLOT, &slot, sizeof slot) || slot != host->exe_base + AIM_RAYCAST)
-    {
-        fpv_log("aim", "off: the physics raycast does not match build %s; the view keeps the game's direction",
-            FPV_GAME_BUILD);
-        return 0;
-    }
-    g.raycast = (RaycastFn)slot;
-    g.state = 1;
-    fpv_log("aim", "the view turns to where the game aims");
-    return 1;
+    const char* why = Check();
+    g.state = why == NULL ? 1 : -1;
+    if (why != NULL)
+        fpv_log("aim", "off (%s, build %s): the view keeps the game's direction", why, FPV_GAME_BUILD);
+    else
+        fpv_log("aim", "the view turns to where the game aims");
+    return g.state == 1;
 }
 
 #ifdef FPV_TEST

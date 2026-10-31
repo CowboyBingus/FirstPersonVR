@@ -14,6 +14,7 @@ static const FirstPersonApi* g_firstPerson;
 /* The exe's code reads as shipped only once the game has loaded, so the camera hook waits for it. */
 static void OnGameLoaded(HfMod* mod, HfEvent event, void* user)
 {
+    fpv_host_modules();
     fpv_camera_install(FPV_PRIORITY_VR);
     g_firstPerson = first_person_api_find();
     if (g_firstPerson != NULL)

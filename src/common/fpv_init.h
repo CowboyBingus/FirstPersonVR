@@ -8,6 +8,8 @@
 /* Checks the SDK (13 or newer, with every member the mods use) and the game build, logging why when it refuses, and
  * fills FpvHost. 1 ready, 0 not (the mod should then return 1 from hellforge_mod_init). */
 int fpv_host_init(const HfApi* api, HfMod* mod);
+/* Looks the modules up again: game.dll loads after the mods' init, so call this at HF_EVENT_GAME_LOADED. */
+void fpv_host_modules(void);
 const HfApi* fpv_api(void);
 HfMod* fpv_mod(void);
 
