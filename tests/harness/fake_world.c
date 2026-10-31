@@ -83,6 +83,16 @@ static void Pose(float* m, float x, float y, float z)
     m[15] = 1;
 }
 
+/* A world pose (4x4 row-major: right, forward, up, position) facing +Y with +Z up. */
+static void WorldPose(float* m, float x, float y, float z)
+{
+    memset(m, 0, 16 * sizeof(float));
+    m[0] = m[5] = m[10] = m[15] = 1;
+    m[12] = x;
+    m[13] = y;
+    m[14] = z;
+}
+
 FakeUnit* fake_add_unit(uint64_t resource, int cameras, float x, float y, float z)
 {
     FakeUnit* unit = &fake_units[g_count];
@@ -104,10 +114,7 @@ FakeUnit* fake_add_unit(uint64_t resource, int cameras, float x, float y, float 
     unit->local[0][12] = unit->local[0][13] = unit->local[0][14] = 1;
     unit->local[0][15] = 0;
     memcpy(unit->game, unit->local[0], sizeof unit->game);
-    Pose(unit->world[0], x, y, z);
-    unit->world[0][12] = x;
-    unit->world[0][13] = y;
-    unit->world[0][14] = z;
+    WorldPose(unit->world[0], x, y, z);
     g_list[g_count++] = (uintptr_t)unit;
     Count();
     return unit;
@@ -117,10 +124,7 @@ void fake_add_node(FakeUnit* unit, const char* name, float x, float y, float z)
 {
     uint32_t n = unit->graph.count++;
     unit->names[n] = fpv_id32(name);
-    Pose(unit->world[n], x, y, z);
-    unit->world[n][12] = x;
-    unit->world[n][13] = y;
-    unit->world[n][14] = z;
+    WorldPose(unit->world[n], x, y, z);
 }
 
 void fake_remove_last(void)

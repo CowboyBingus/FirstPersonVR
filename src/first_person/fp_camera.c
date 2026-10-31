@@ -11,8 +11,9 @@
  * person. Outside a mission (the ship, the screen after a mission, whose camera can sit near the head) it is never on
  * foot.
  *
- * The eye is the head node plus the options' eye_forward along the view's heading and eye_up (0.12 m and 0.06 m). The
- * heading is level: along the full view, looking down sank the eye into the neck and shoulder armour (seen live). The
+ * The eye is the head node plus the options' eye_forward along the body's facing and eye_up (0.12 m and 0.06 m). Level,
+ * since along the full view, looking down sank the eye into the neck and shoulder armour; and the body's, since the
+ * view's heading put the eye behind the head while a quick turn left the body behind (both seen live). The
  * eye is steadied: the head's place relative to the Helldiver's root (node 0) is smoothed, so the run's bob and sway
  * are softened while the root carries the eye along at once. Measured live: jogging bobs the head 13-24 cm at about
  * 2 Hz; the height follows at FP_EYE_RATE_UP (a third of that bob is left), the rest at FP_EYE_RATE. Crouching or going
@@ -135,13 +136,16 @@ static void Search(uintptr_t world, const float* pose)
             count, avatars, nearestSq < 0 ? -1.0f : sqrtf(nearestSq), camera.x, camera.y, camera.z);
 }
 
-/* The head's and the root's world positions, or 0 when they cannot be read. */
-static int Head(FpvVec3* head, FpvVec3* root)
+/* The head's and the root's world positions and the body's facing (the root's forward, level; 0 when it has none), or
+ * 0 when they cannot be read. */
+static int Head(FpvVec3* head, FpvVec3* root, FpvVec3* facing)
 {
     float m[16], r[16];
     if (!fpv_unit_world_pose(g.unit, g.head, m) || !fpv_unit_world_pose(g.unit, 0, r)) return 0;
     *head = fpv_v3(m[12], m[13], m[14]);
     *root = fpv_v3(r[12], r[13], r[14]);
+    *facing = fpv_v3(r[4], r[5], 0);
+    if (!isfinite(facing->x) || !isfinite(facing->y) || !fpv_normalize(facing)) *facing = fpv_v3(0, 0, 0);
     return isfinite(head->x) && isfinite(head->y) && isfinite(head->z) && isfinite(root->x) && isfinite(root->y) &&
         isfinite(root->z);
 }
@@ -172,7 +176,8 @@ static int Keep(uintptr_t world, const float* pose)
 static float Follow(float rate, float dt) { return 1.0f - expf(-rate * dt); }
 
 /* First Person's pose for this frame, from the game's: the steadied eye, looking where the game aims. */
-static void FirstPersonPose(const float* game, FpvVec3 head, FpvVec3 root, int fresh, float dt, float* out)
+static void FirstPersonPose(const float* game, FpvVec3 head, FpvVec3 root, FpvVec3 facing, int fresh, float dt,
+    float* out)
 {
     FpvVec3 offset = fpv_sub(head, root);
     if (fresh) g.offset = offset;
@@ -184,10 +189,14 @@ static void FirstPersonPose(const float* game, FpvVec3 head, FpvVec3 root, int f
         g.offset.z += (offset.z - g.offset.z) * Follow(FP_EYE_RATE_UP, dt);
     }
     FpvVec3 steady = fpv_add(root, g.offset), forward = fpv_pose_forward(game), aimed;
-    FpvVec3 heading = fpv_v3(forward.x, forward.y, 0);
-    if (!fpv_normalize(&heading)) heading = fpv_pose_up(game);  /* straight down or up: the top of the view is ahead */
-    heading.z = 0;
-    if (!fpv_normalize(&heading)) heading = fpv_v3(0, 0, 0);
+    /* Out along the body's facing, in front of the face: the view's heading put the eye behind the head while a quick
+     * turn left the body behind (seen live: the helmet from inside). */
+    FpvVec3 heading = facing;
+    if (fpv_dot(heading, heading) == 0)
+    {
+        heading = fpv_v3(forward.x, forward.y, 0);
+        if (!fpv_normalize(&heading)) heading = fpv_v3(0, 0, 0);
+    }
     /* Looking up, the helmet's brim hangs over the eye (seen live): the eye goes further out, up to FP_EYE_UP_OUT more
      * looking straight up. */
     float ahead = fp_options()->eye_forward + FP_EYE_UP_OUT * (forward.z > 0 ? forward.z : 0);
@@ -219,8 +228,8 @@ int fp_camera_filter(float* pose, void* context)
     float dt = g.last > 0 && now > g.last ? (float)(now - g.last) : 0;
     if (dt > 0.1f) dt = 0.1f;  /* a hitch, or the first frame back: no big jumps */
     g.last = now;
-    FpvVec3 camera = fpv_pose_position(pose), head, root;
-    int known = Keep(fpv_camera_world(), pose) && Head(&head, &root);
+    FpvVec3 camera = fpv_pose_position(pose), head, root, facing;
+    int known = Keep(fpv_camera_world(), pose) && Head(&head, &root, &facing);
     FpvVec3 d = known ? fpv_sub(head, camera) : fpv_v3(0, 0, 0);
     int mission = fpv_in_mission();
     int onFoot = known && mission && fpv_dot(d, d) < FP_ON_FOOT_RANGE * FP_ON_FOOT_RANGE;
@@ -233,7 +242,7 @@ int fp_camera_filter(float* pose, void* context)
     if (g.blend <= 0) return 0;
     float game[16], view[16];
     memcpy(game, pose, sizeof game);
-    FirstPersonPose(game, head, root, fresh, dt, view);
+    FirstPersonPose(game, head, root, facing, fresh, dt, view);
     float t = g.blend * g.blend * (3 - 2 * g.blend);
     if (t >= 1 || !fpv_pose_blend(game, view, t, pose)) memcpy(pose, view, sizeof view);
     return 1;
