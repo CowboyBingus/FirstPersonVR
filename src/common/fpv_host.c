@@ -104,6 +104,11 @@ int fpv_exe_hook(uint32_t rva, const char* shipped, void* detour, void** origina
 
 static uint32_t HostGameState(void) { return g_api->game_state(g_mod); }
 
+const char* fpv_mod_folder(void)
+{
+    return g_api != NULL && g_api->mod_folder != NULL ? g_api->mod_folder(g_mod) : NULL;
+}
+
 int fpv_in_mission(void)
 {
     return g_host.game_state == NULL || g_host.game_state() == HF_STATE_MISSION;

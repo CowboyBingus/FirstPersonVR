@@ -1,5 +1,7 @@
-/* The player's options: %LOCALAPPDATA%\CowboyBingus\FirstPerson\options.ini, read at load (written with the defaults
- * when there is none), and the toggle key, polled once a frame while the game's window is in front.
+/* The player's options: options.ini in the mod's folder, shipped with the defaults and read at load (the defaults when
+ * it is missing), and the toggle key, polled once a frame while the game's window is in front. The mod's folder, not
+ * %LOCALAPPDATA%: HellForge gives each session a %LOCALAPPDATA% of its own, so nothing written there is kept, and it
+ * holds mod folders read-only while the game runs, so the mod only reads the file.
  *
  *     enabled = true                   ; First Person on at the start
  *     toggle_key = F6                  ; switches it on and off in game (F1-F12, A-Z, 0-9, or none)
@@ -26,6 +28,7 @@
 static FpOptions g_options = {{1, 1, FP_SITUATION_ON_FOOT}, FP_DEFAULT_TOGGLE, 0.12f, 0.06f};
 static int g_keyDown;
 
+/* mods/first-person/options.ini as shipped (a test keeps the two the same). */
 static const char kDefaults[] =
     "; First Person's options, read when the game starts.\n"
     "enabled = true\n"
@@ -167,38 +170,19 @@ int fp_options_parse(const char* text, FpOptions* options)
 }
 
 #ifndef FPV_TEST
-static int Path(char* path, size_t size, int makeFolders)
-{
-    const char* base = getenv("LOCALAPPDATA");
-    if (base == NULL || base[0] == 0) return 0;
-    if (makeFolders)
-    {
-        snprintf(path, size, "%s\\CowboyBingus", base);
-        CreateDirectoryA(path, NULL);
-        snprintf(path, size, "%s\\CowboyBingus\\FirstPerson", base);
-        CreateDirectoryA(path, NULL);
-    }
-    return snprintf(path, size, "%s\\CowboyBingus\\FirstPerson\\options.ini", base) < (int)size;
-}
-
-static void WriteDefaults(void)
-{
-    char path[MAX_PATH];
-    if (!Path(path, sizeof path, 1)) return;
-    FILE* file = fopen(path, "wb");
-    if (file == NULL) { fpv_log("options", "could not write %s: the defaults are used", path); return; }
-    fputs(kDefaults, file);
-    fclose(file);
-    fpv_log("options", "wrote the defaults to %s", path);
-}
-
 void fp_options_load(void)
 {
     fp_options_defaults(&g_options);
-    char path[MAX_PATH], text[4096];
-    if (!Path(path, sizeof path, 0)) { fpv_log("options", "no LOCALAPPDATA: the defaults are used"); return; }
-    FILE* file = fopen(path, "rb");
-    if (file == NULL) { WriteDefaults(); return; }
+    const char* folder = fpv_mod_folder();
+    char path[1024], text[4096];
+    if (folder == NULL || snprintf(path, sizeof path, "%s\\options.ini", folder) >= (int)sizeof path)
+    {
+        fpv_log("options", "the mod's folder is not known: the defaults are used");
+        return;
+    }
+    wchar_t wide[1024];
+    FILE* file = MultiByteToWideChar(CP_UTF8, 0, path, -1, wide, 1024) > 0 ? _wfopen(wide, L"rb") : NULL;
+    if (file == NULL) { fpv_log("options", "no %s: the defaults are used", path); return; }
     size_t n = fread(text, 1, sizeof text - 1, file);
     fclose(file);
     text[n] = 0;

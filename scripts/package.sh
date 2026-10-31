@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Packs a test-build zip of each mod (mods/first-person, mods/vr-mode): its hellforge-mod.json and DLL. The names say
-# test build, do not publish. Never publish these zips.
+# Packs a test-build zip of each mod (mods/first-person, mods/vr-mode): its hellforge-mod.json, DLL and options.ini
+# when it has one. The names say test build, do not publish. Never publish these zips.
 # Usage: scripts/package.sh
 set -euo pipefail
 export LC_ALL=C
@@ -24,7 +24,9 @@ pack() {
     done
     mkdir -p -- "$root/build"
     rm -f -- "$zip"
-    (cd "$folder" && zip -9 -q "$zip" hellforge-mod.json "$dll")
+    local files=(hellforge-mod.json "$dll")
+    [[ -f $folder/options.ini ]] && files+=(options.ini)
+    (cd "$folder" && zip -9 -q "$zip" "${files[@]}")
     printf 'Test build, do not publish: %s\n' "$zip"
 }
 

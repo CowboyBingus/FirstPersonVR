@@ -28,11 +28,11 @@ void fp_options_defaults(FpOptions* options);
 /* Reads `key = value` lines into options (defaults kept for what is not understood); returns the lines not understood. */
 int fp_options_parse(const char* text, FpOptions* options);
 int fp_options_key(const char* name, uint32_t* vk);
-void fp_options_load(void);   /* the file, or the defaults (written as the file when there is none) */
+void fp_options_load(void);   /* options.ini in the mod's folder, or the defaults */
 void fp_options_apply(void);  /* hands the settings to the view decision */
 void fp_options_tick(void);   /* once a frame: the toggle key */
 const FpOptions* fp_options(void);
-const char* fp_options_default_text(void); /* the file written when there is none */
+const char* fp_options_default_text(void); /* mods/first-person/options.ini as shipped */
 #ifdef FPV_TEST
 void fp_options_set_key_for_test(int down);
 #endif

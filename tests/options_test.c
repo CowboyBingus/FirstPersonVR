@@ -1,4 +1,5 @@
 /* The options file: its lines, bad values left at their defaults, key names, and the toggle key. */
+#include <stdio.h>
 #include <string.h>
 #include "fp.h"
 #include "harness/fake_host.h"
@@ -26,6 +27,25 @@ static void TheWrittenFileReadsAsTheDefaults(void)
     memset(&o, 0, sizeof o);
     CHECK_EQ(fp_options_parse(fp_options_default_text(), &o), 0);
     CHECK(memcmp(&o, &d, sizeof o) == 0);
+}
+
+static void ShippedFileIsTheDefaults(void)
+{
+    char text[4096] = {0};
+    FILE* file = fopen("../../mods/first-person/options.ini", "rb"); /* the tests run in build/tests */
+    CHECK(file != NULL);
+    if (file == NULL) return;
+    size_t n = fread(text, 1, sizeof text - 1, file);
+    fclose(file);
+    text[n] = 0;
+    char expected[4096] = {0};
+    size_t m = 0;
+    for (const char* c = fp_options_default_text(); *c != 0 && m < sizeof expected - 2; c++)
+    {
+        if (*c == '\n') expected[m++] = '\r';
+        expected[m++] = *c;
+    }
+    CHECK(strcmp(text, expected) == 0);
 }
 
 static void LinesAreRead(void)
@@ -100,6 +120,7 @@ int main(void)
 {
     RUN(DefaultsAreFirstPersonOnFoot);
     RUN(TheWrittenFileReadsAsTheDefaults);
+    RUN(ShippedFileIsTheDefaults);
     RUN(LinesAreRead);
     RUN(BadValuesKeepTheDefaults);
     RUN(KeyNames);

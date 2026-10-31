@@ -30,6 +30,8 @@ const FpvHost* fpv_host(void);
 /* The game is in a mission (HellForge's HF_STATE_MISSION): not the title, the ship, a loading screen or the screen after a
  * mission. */
 int fpv_in_mission(void);
+/* The mod's folder (UTF-8), or NULL when not known (tests). */
+const char* fpv_mod_folder(void);
 #ifdef FPV_TEST
 FpvHost* fpv_host_for_test(void);
 void fpv_seconds_for_test(double seconds); /* fpv_seconds answers this from now on (below 0: the real clock again) */
