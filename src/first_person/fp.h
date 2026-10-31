@@ -30,6 +30,12 @@ int fp_view_active(void);
 void fp_camera_reset(void);
 int fp_camera_filter(float* pose, void* context);
 
+#ifdef FPV_PROBE
+/* A probe build's pose-setter census (fp_probe.c). */
+void fp_probe_install(void);
+void fp_probe_tick(void);
+#endif
+
 /* The table first_person_get_api returns. */
 const FirstPersonApi* fp_api_table(void);
 

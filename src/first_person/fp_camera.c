@@ -116,6 +116,9 @@ static void Say(int active)
 
 int fp_camera_filter(float* pose, void* context)
 {
+#ifdef FPV_PROBE
+    fp_probe_tick();
+#endif
     uintptr_t world = fpv_camera_world();
     FpvVec3 camera = fpv_pose_position(pose), head;
     if (!StillThere(world))

@@ -91,7 +91,9 @@ includes=(-I "$sdk" -I "$root/include" -I "$root/src/common" -I "$root/src/first
 build_dll() {
     local dll=$1
     shift
-    if ! "$zig" cc -std=c11 -target x86_64-windows-gnu -shared -O2 -Wall -Werror -Wno-unused-parameter \
+    # FPV_CFLAGS adds flags to the DLLs only (e.g. -DFPV_PROBE for a probe build; never ship one).
+    # shellcheck disable=SC2086
+    if ! "$zig" cc -std=c11 -target x86_64-windows-gnu -shared -O2 -Wall -Werror -Wno-unused-parameter ${FPV_CFLAGS:-} \
         "${includes[@]}" "$@" -o "$dll"; then
         echo "$dll did not compile." >&2
         exit 1
