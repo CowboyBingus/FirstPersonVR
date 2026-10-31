@@ -20,7 +20,7 @@ says what that covers and what only a tester can check.
   looks it up at game load.
 - Tests: the camera search and filter against a fake world; the pose math; the view decision and the API table.
 
-## G1: first person (on foot): in progress
+## G1: first person (on foot): in progress (steps 1, 2, 5 and 7 done)
 
 1. **The diver** (done, live). The Helldiver unit by its resource nearest the game's camera, its head node by name
    hash ([findings.md](findings.md)).
@@ -32,20 +32,22 @@ says what that covers and what only a tester can check.
    the engine allows it.
 4. **The near plane and field of view.** Camera.set_near_range and set_vertical_fov (or their fields), so the weapon and
    arms do not clip.
-5. **Aim.** The biggest unknown. The third-person reticle's ray starts at the shoulder camera; with the camera moved to
-   the head, shots must land where the centre of the view points. Leads, in order:
-   - the game's own first-person sights (it already has a first-person aim): keep that camera mode on, or
-   - move the game's camera in its own update (before aim is computed) rather than at the render step, or
-   - correct the aim ray where the weapon reads it.
+5. **Aim** (done, live). The view turns from the eye to where the game's own line of fire hits (one damage line of sight
+   ray a frame), so the reticle and the shots are at the screen's centre; the game's own first-person aim (its sights
+   and scopes) is kept as it is.
 6. **Situations.** Detected every frame and handed to the view decision (and so to the API): on foot, vehicle, mech,
    emplacement, hellpod, ship, ragdoll. By default first person on foot only, but first person has to work in every
    situation, since a mod (or the player's options) can ask for it in vehicles and the rest: the camera follows the
    diver's head wherever the diver sits. Emotes and menus stay third person; a key switches. Camera shake down (the weapon's `fire_loop_camera_shake` fields, or the shake
    function).
-7. **Options.** `%LOCALAPPDATA%\CowboyBingus\FirstPerson\options.ini`: on/off, the toggle key, which situations are
-   first person, "mods may change the view", head offset, fov, near plane, shake.
+7. **Options** (done, live). `options.ini` in the mod's folder (HellForge gives each session a `LOCALAPPDATA` of its
+   own): on/off, the toggle key, which situations are first person, "mods may change the view", the eye's place. Still
+   to add: fov, near plane, shake.
 8. **API version 2 if a mod needs it:** a camera anchor (a node of a vehicle's unit and an offset) for seats where the
    head is the wrong place, and an event when the view changes.
+
+Done besides, live: the steadied eye (running bobs the head 13-24 cm), first person only in a mission, blended switches,
+the options file in the mod's folder with the toggle key, and a Helldiver search that skips teammates behind the camera.
 
 Tested here: everything, in game (harness runs with the light preset and screenshots), plus unit tests.
 

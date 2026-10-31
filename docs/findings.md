@@ -49,8 +49,44 @@ What the mods rely on, and how each fact was established. "Live" means read in t
 - With the camera at the head node, 0.12 m forward along the view and 0.06 m up, keeping the game camera's rotation:
   the view is at eye height, and the helmet does not show (screenshot in a solo mission).
 - When the Helldiver died, the game's camera moved away from the head, and the mod went back to third person, as meant.
-- Not checked yet: aim (whether shots land at the screen's centre), the weapon and arms in view while moving, other
-  players' Helldivers, vehicles, emplacements, the hellpod.
+- Not checked yet: other players' Helldivers, emotes, vehicles, emplacements.
+
+## Aim (live 2026-10-31)
+
+- game.dll aims from its own third-person camera and never reads the engine camera (a census of the Camera getters,
+  exe+0x30DE10, +0x30DE90, +0x30E190, +0x30E1F0, +0x30D940, +0x30D980, hooked in a probe build: only the renderer's
+  setup at exe+0x77E5A0 called them). Moving the engine camera does not move where shots go.
+- The engine's synchronous raycast: the physics interface `*(game.dll+0x3326328)`, slot +0x68 = exe+0x77DEC0,
+  `int (u32 query, const float from[3], const float dir[3], float length, int 0, float result[16], int 1)`; the return
+  is the number of hits, the first hit's position at result[0..2].
+- Query ids are 0x80000000 | the row of the engine's query table (exe+0x27B9440, 20-byte rows: mode, ?, ?, the query
+  name's hash at +12, flags). Row 4 is damage_los_query (0x2315515D, mode 1: the closest hit); row 1 damage_query,
+  row 3 damage_no_foliage, rows 10 and 11 climbable. Rows 1-3 (mode 2) report a hit at the ray's start when it starts
+  inside the Helldiver; row 7 (the one the game's prebuilt ground rays use, `*(*(game.dll+0x346D508)+8)+0xA4`) passes
+  through props.
+- With the view turned to the damage line of sight's hit along the game's line, the game's reticle, its weapon laser
+  and the impacts are at the screen's centre.
+- Middle mouse while aiming is the game's own first-person aim: its camera goes to 0.16 m from the head.
+
+## Moving about (live)
+
+- Jogging bobs the head 13-24 cm up and down at about 2 Hz relative to the root (node 0), and 5-25 cm fore and aft.
+- Prone puts the head 0.41 m above the root.
+- The screen after a mission (the squad's cards) has its camera 1.6 m from the head: a distance alone is not "on foot".
+
+## HellForge sessions
+
+- The game runs with `LOCALAPPDATA`, `APPDATA` and `TEMP` pointed into the session's folder
+  (`logs/sessions/<id>/game/environment`), new each session, so a mod's file written there is gone the next time. The
+  mod's own folder is kept, read-only while the game runs.
+
+## The test harness
+
+- Screenshots from the OBS scene crop a game window larger than its canvas: the game drew 1920x1080 on a 1280x720
+  canvas, so the scene showed the top-left part and the screen's centre looked off. Capture the source itself.
+- The harness's test-input mod drives the engine's keyboard and mouse (`harness.py input`): W walks, the mouse buttons
+  aim and fire, `look` turns, Z goes prone, G throws. Left Ctrl did not crouch, and X did not emote, standing on the
+  hellpod.
 
 ## Cautions
 
