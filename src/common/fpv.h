@@ -21,6 +21,8 @@ typedef struct FpvHost
     int (*hook)(uintptr_t target, const char* shipped, void* detour, void** original, int32_t priority); /* 1 hooked */
     uintptr_t exe_base;
     size_t exe_size;
+    uintptr_t game_base;
+    size_t game_size;
 } FpvHost;
 
 const FpvHost* fpv_host(void);
@@ -87,6 +89,8 @@ void fpv_camera_set_filter(FpvCameraFilter filter, void* context);
 /* Forget the camera unit (the world changed): it is looked for again on the next frame that needs it. */
 void fpv_camera_forget(void);
 void fpv_camera_status(FpvCameraStatus* out);
+/* The engine's Unit* for a unit reference (0 when the camera is not installed or the unit is gone). */
+uintptr_t fpv_engine_unit(uint32_t unit);
 
 #ifdef FPV_TEST
 typedef struct FpvEngineFns

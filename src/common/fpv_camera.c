@@ -180,6 +180,8 @@ void fpv_camera_set_filter(FpvCameraFilter filter, void* context)
     g_filter = filter;
 }
 
+uintptr_t fpv_engine_unit(uint32_t unit) { return g_unit != NULL && unit != 0 ? g_unit(unit) : 0; }
+
 void fpv_camera_forget(void)
 {
     g_ref = 0;

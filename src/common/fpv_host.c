@@ -136,6 +136,7 @@ int fpv_host_init(const HfApi* api, HfMod* mod)
     g_host.code_matches = HostCodeMatches;
     g_host.hook = HostHook;
     g_host.exe_base = api->module_base("helldivers2.exe", &g_host.exe_size);
+    g_host.game_base = api->module_base("game.dll", &g_host.game_size);
     return 1;
 }
 
