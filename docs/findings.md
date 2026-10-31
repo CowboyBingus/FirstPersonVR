@@ -90,7 +90,24 @@ What the mods rely on, and how each fact was established. "Live" means read in t
   aim and fire, `look` turns, Z goes prone, G throws. Left Ctrl did not crouch, and X did not emote, standing on the
   hellpod.
 
+## Edge cases (live 2026-10-31)
+
+- The diver faces where it runs, not where the camera looks: strafing, running diagonally or back towards the camera,
+  and standing still after a quick turn all leave the body turned from the view. Looking down then showed the shoulder
+  armour, the back or the backpack until the eye went further out along the view (fp_camera.c).
+- The cape still shows looking down while running back or sideways, and across the top of the view during a dive: it
+  hangs where the eye goes. It needs hiding, not a camera move.
+- A dead Helldiver's body stays in the world as the same unit; the reinforcement is another unit.
+- Mesh visibility: exe+0x200CF0 (the Unit C API's +432) only looks a mesh up (Unit vtable +0x118: a name or index to
+  the mesh's index). The Lua binding Unit.set_mesh_visibility (exe+0x4128E0, a thunk to the body at exe+0x4124D0)
+  takes an optional fourth argument, a visibility context (IdString through exe+0x5D5840), and sets visibility deeper
+  in. Not found yet: the setter itself. Setting a node's local scale once from Lua (cape1 node 35, backpack node 30 of
+  the Helldiver) changed nothing on screen: the animation writes those poses every frame, or the cape is skinned to an
+  armour unit's own bones.
+
 ## Cautions
 
+- A harness Lua call that read `Unit.num_scene_graph_items` and `Unit.mesh` of every unit within 1.5 m of the Helldiver
+  crashed the game (an access violation in exe+0x9E27E, under the unit lookup exe+0x9D8C0 and the Unit bindings).
 - A harness Lua call that walked every unit with `Unit.scene_graph_parent` crashed the game (an access violation in
   exe+0x4087C4 under lua51.dll). Keep live Lua probes to the bindings used above.
