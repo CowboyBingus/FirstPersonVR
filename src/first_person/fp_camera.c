@@ -122,8 +122,11 @@ int fp_camera_filter(float* pose, void* context)
     {
         g.unit = 0;
         if (g.wait > 0) g.wait--;
-        else Search(world, camera);
-        if (g.unit == 0) g.wait = FP_SEARCH_FRAMES;
+        else
+        {
+            Search(world, camera);
+            if (g.unit == 0) g.wait = FP_SEARCH_FRAMES;
+        }
     }
     if (g.unit == 0 || !Head(&head))
     {

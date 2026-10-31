@@ -86,6 +86,18 @@ static void NoHeadNoFirstPerson(void)
     CHECK_LOG("the Helldiver has no head node");
 }
 
+static void HelldiverArrivingLaterIsFound(void)
+{
+    void (*step)(void*) = Setup();
+    fake_add_unit(1, 1, 0, -3, 2);
+    step(NULL); /* the title screen: no Helldiver yet */
+    FakeUnit* diver = fake_add_unit(AVATAR, 0, 0, 0, 0);
+    fake_add_node(diver, "head", 0, 0, 1.6f);
+    for (int i = 0; i < 40; i++) step(NULL);
+    CHECK(fake_sets > 0);
+    CHECK_LOG("the Helldiver: unit 101");
+}
+
 int main(void)
 {
     RUN(CameraGoesToTheHead);
@@ -93,5 +105,6 @@ int main(void)
     RUN(SwitchedOffStaysThirdPerson);
     RUN(DestroyedHelldiverIsNoticed);
     RUN(NoHeadNoFirstPerson);
+    RUN(HelldiverArrivingLaterIsFound);
     TEST_END();
 }
