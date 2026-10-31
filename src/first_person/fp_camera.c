@@ -11,9 +11,10 @@
  * person. Outside a mission (the ship, the screen after a mission, whose camera can sit near the head) it is never on
  * foot.
  *
- * The eye is the head node plus the options' eye_forward along the body's facing and eye_up (0.12 m and 0.06 m). Level,
- * since along the full view, looking down sank the eye into the neck and shoulder armour; and the body's, since the
- * view's heading put the eye behind the head while a quick turn left the body behind (both seen live). The
+ * The eye is the head node plus the options' eye_forward along the view's heading (level: along the full view, looking
+ * down sank the eye into the neck and shoulder armour) and eye_up (0.12 m and 0.06 m). Not along the body's facing:
+ * the diver faces where it runs, so the view looked back across its own shoulder (all seen live). The eye goes further
+ * out looking up (the helmet's brim) and looking down with the body turned away (its back and backpack). The
  * eye is steadied: the head's place relative to the Helldiver's root (node 0) is smoothed, so the run's bob and sway
  * are softened while the root carries the eye along at once. Measured live: jogging bobs the head 13-24 cm at about
  * 2 Hz; the height follows at FP_EYE_RATE_UP (a third of that bob is left), the rest at FP_EYE_RATE. Crouching or going
@@ -40,6 +41,7 @@
 #define FP_EYE_RATE 10.0f       /* per second: how fast the steadied eye follows the head, sideways and fore and aft */
 #define FP_EYE_RATE_UP 5.0f     /* and up and down */
 #define FP_EYE_UP_OUT 0.15f     /* metres further out along the heading, looking straight up */
+#define FP_EYE_AWAY_OUT 0.35f   /* and looking straight down with the body facing the other way */
 #define FP_BLEND_SECONDS 0.25f
 #define FP_GAME_SIGHTS 0.5f     /* the game's camera this near the head is its own first-person aim */
 
@@ -189,17 +191,13 @@ static void FirstPersonPose(const float* game, FpvVec3 head, FpvVec3 root, FpvVe
         g.offset.z += (offset.z - g.offset.z) * Follow(FP_EYE_RATE_UP, dt);
     }
     FpvVec3 steady = fpv_add(root, g.offset), forward = fpv_pose_forward(game), aimed;
-    /* Out along the body's facing, in front of the face: the view's heading put the eye behind the head while a quick
-     * turn left the body behind (seen live: the helmet from inside). */
-    FpvVec3 heading = facing;
-    if (fpv_dot(heading, heading) == 0)
-    {
-        heading = fpv_v3(forward.x, forward.y, 0);
-        if (!fpv_normalize(&heading)) heading = fpv_v3(0, 0, 0);
-    }
-    /* Looking up, the helmet's brim hangs over the eye (seen live): the eye goes further out, up to FP_EYE_UP_OUT more
-     * looking straight up. */
-    float ahead = fp_options()->eye_forward + FP_EYE_UP_OUT * (forward.z > 0 ? forward.z : 0);
+    FpvVec3 heading = fpv_v3(forward.x, forward.y, 0);
+    if (!fpv_normalize(&heading)) heading = facing;
+    /* Further out looking up (the helmet's brim hangs over the eye), and looking down while the body faces away from
+     * the view (after a quick turn, or running back towards the camera: the back and the backpack were under the eye). */
+    float away = fpv_dot(facing, facing) > 0 ? (1 - fpv_dot(facing, heading)) * 0.5f : 0;
+    float ahead = fp_options()->eye_forward + FP_EYE_UP_OUT * (forward.z > 0 ? forward.z : 0) +
+        FP_EYE_AWAY_OUT * away * (forward.z < 0 ? -forward.z : 0);
     FpvVec3 eye = fpv_add(steady, fpv_scale(heading, ahead));
     eye.z += fp_options()->eye_up;
     if (fp_aim_forward(game, eye, steady, dt, &aimed) && fpv_pose_look(game, eye, aimed, fpv_v3(0, 0, 1), out)) return;

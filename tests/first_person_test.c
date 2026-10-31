@@ -53,7 +53,7 @@ static void LookingDownKeepsTheEyeLevel(void)
     CHECK(Near(fake_set_pose[10], 0.12f));   /* still ahead of the head, level */
 }
 
-static void QuickTurnKeepsTheEyeBeforeTheFace(void)
+static void TurnedAwayBodyLevelViewStaysAtTheHead(void)
 {
     void (*step)(void*) = Setup();
     FakeUnit* camera = fake_add_unit(1, 1, 0, 3, 2);
@@ -62,7 +62,22 @@ static void QuickTurnKeepsTheEyeBeforeTheFace(void)
     FakeUnit* diver = fake_add_unit(AVATAR, 0, 0, 0, 0);
     fake_add_node(diver, "head", 0, 0, 1.6f);
     step(NULL);
-    CHECK(Near(fake_set_pose[10], 0.12f));   /* in front of the face, not 0.12 m behind the head */
+    CHECK(Near(fake_set_pose[10], -0.12f));  /* level: out along the view, the body's facing does not matter */
+}
+
+static void TurnedAwayBodyLookingDownGoesFurtherOut(void)
+{
+    void (*step)(void*) = Setup();
+    FakeUnit* camera = fake_add_unit(1, 1, 0, 3, 2);
+    /* the view turned round to -Y and 80 degrees down; the body still faces +Y */
+    float c = 0.17365f, sn = 0.98481f;
+    float rows[9] = {-1, 0, 0, 0, -c, -sn, 0, -sn, c};
+    for (int i = 0; i < 9; i++) camera->game[i] = camera->local[0][i] = rows[i];
+    FakeUnit* diver = fake_add_unit(AVATAR, 0, 0, 0, 0);
+    fake_add_node(diver, "head", 0, 0, 1.6f);
+    step(NULL);
+    CHECK(fake_set_pose[10] < -0.4f && fake_set_pose[10] > -0.5f); /* clear of the back and the backpack */
+    CHECK(Near(fake_set_pose[11], 1.66f));
 }
 
 static void TeammateBehindTheCameraIsNotTaken(void)
@@ -238,7 +253,8 @@ int main(void)
 {
     RUN(CameraGoesToTheHead);
     RUN(LookingDownKeepsTheEyeLevel);
-    RUN(QuickTurnKeepsTheEyeBeforeTheFace);
+    RUN(TurnedAwayBodyLevelViewStaysAtTheHead);
+    RUN(TurnedAwayBodyLookingDownGoesFurtherOut);
     RUN(TeammateBehindTheCameraIsNotTaken);
     RUN(FarCameraIsNotOnFoot);
     RUN(SwitchedOffStaysThirdPerson);
