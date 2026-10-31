@@ -24,6 +24,7 @@ HF_MOD_EXPORT int hellforge_mod_init(const HfApi* api, HfMod* mod)
 {
     fp_view_reset();
     fp_camera_reset();
+    fp_aim_reset();
     if (!fpv_host_init(api, mod)) return 1;
     if (api->on(mod, HF_EVENT_GAME_LOADED, OnGameLoaded, NULL) != 0)
         fpv_log("mod", "HF_EVENT_GAME_LOADED could not be registered: no camera");

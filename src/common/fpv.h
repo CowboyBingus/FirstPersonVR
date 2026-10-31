@@ -33,6 +33,8 @@ FpvHost* fpv_host_for_test(void);
 void fpv_log(const char* feature, const char* format, ...);
 void fpv_log_once(int* logged, const char* feature, const char* format, ...);
 int fpv_read(uintptr_t address, void* out, size_t size);
+/* Seconds from a steady clock (QueryPerformanceCounter). */
+double fpv_seconds(void);
 /* hook_ex at helldivers2.exe + rva, after its unhooked bytes match `shipped`. 1 hooked, 0 refused. */
 int fpv_exe_hook(uint32_t rva, const char* shipped, void* detour, void** original, int32_t priority);
 /* 1 when the unhooked bytes at helldivers2.exe + rva match the pattern. */

@@ -4,6 +4,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <windows.h>
 #include "fpv_init.h"
 
 static const HfApi* g_api;
@@ -70,6 +71,15 @@ static int HostHook(uintptr_t target, const char* shipped, void* detour, void** 
 int fpv_read(uintptr_t address, void* out, size_t size)
 {
     return g_host.read != NULL && address != 0 && g_host.read(address, out, size);
+}
+
+double fpv_seconds(void)
+{
+    static LARGE_INTEGER frequency;
+    LARGE_INTEGER now;
+    if (frequency.QuadPart == 0) QueryPerformanceFrequency(&frequency);
+    QueryPerformanceCounter(&now);
+    return frequency.QuadPart ? (double)now.QuadPart / (double)frequency.QuadPart : 0;
 }
 
 int fpv_exe_matches(uint32_t rva, const char* pattern)

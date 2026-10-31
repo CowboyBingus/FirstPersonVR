@@ -26,6 +26,18 @@ void fp_view_set_situation(uint32_t situation);
 uint32_t fp_view_situation(void);
 int fp_view_active(void);
 
+/* Aim (fp_aim.c): the view's forward from the eye towards where the game's own line of fire hits. `game` is the game's
+ * camera pose this frame, `head` the head node's position. 1 with *forward, 0 to keep the game's direction. */
+void fp_aim_reset(void);
+int fp_aim_forward(const float* game, FpvVec3 eye, FpvVec3 head, float dt, FpvVec3* forward);
+/* The smoothed hit distance: nearer within a frame or two, farther over about a fifth of a second. */
+float fp_aim_smooth(float smoothed, float target, float dt);
+#ifdef FPV_TEST
+typedef int (*FpAimRaycast)(uint32_t query, const float* from, const float* dir, float length, int zero, float* result,
+    int closest);
+void fp_aim_set_for_test(FpAimRaycast raycast, uint32_t query);
+#endif
+
 /* The camera filter (fp_camera.c): the camera at the Helldiver's eyes while the view is First Person's. */
 void fp_camera_reset(void);
 int fp_camera_filter(float* pose, void* context);

@@ -8,8 +8,9 @@
  * The situation: on foot while the game's camera is within FP_ON_FOOT_RANGE of the head (its over-the-shoulder camera);
  * anything else (vehicles, the hellpod, cutscenes, the map) is not known yet and stays third person.
  *
- * The view keeps the game camera's rotation, so the direction the game aims along is the one on screen; only the
- * position moves, to the head node plus FP_EYE_FORWARD along the view and FP_EYE_UP.
+ * The eye is the head node plus FP_EYE_FORWARD along the view and FP_EYE_UP. The view turns from there to where the
+ * game's own line of fire hits (fp_aim.c), so the screen's centre is where shots land; without that, it keeps the game
+ * camera's direction.
  *
  * Cost per frame: about ten reads; the search (every unit's resource) only while no Helldiver is known.
  */
@@ -33,6 +34,7 @@ static struct
     int active;          /* last frame's view was First Person's */
     int loggedHead;
     int searches;        /* searches that found no Helldiver, logged for the first FP_SEARCHES_LOGGED */
+    double last;         /* the last filtered frame's time */
 } g;
 
 #define FP_SEARCHES_LOGGED 5
@@ -142,8 +144,18 @@ int fp_camera_filter(float* pose, void* context)
     int active = fp_view_active();
     Say(active);
     if (!active) return 0;
-    FpvVec3 forward = fpv_pose_forward(pose), eye = fpv_add(head, fpv_scale(forward, FP_EYE_FORWARD));
+    double now = fpv_seconds();
+    float dt = g.last > 0 && now > g.last ? (float)(now - g.last) : 0;
+    g.last = now;
+    FpvVec3 forward = fpv_pose_forward(pose), eye = fpv_add(head, fpv_scale(forward, FP_EYE_FORWARD)), aimed;
     eye.z += FP_EYE_UP;
+    float game[16], view[16];
+    memcpy(game, pose, sizeof game);
+    if (fp_aim_forward(game, eye, head, dt, &aimed) && fpv_pose_look(game, eye, aimed, fpv_v3(0, 0, 1), view))
+    {
+        memcpy(pose, view, sizeof view);
+        return 1;
+    }
     pose[9] = eye.x;
     pose[10] = eye.y;
     pose[11] = eye.z;
