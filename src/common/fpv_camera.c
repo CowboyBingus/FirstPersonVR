@@ -12,7 +12,7 @@
  * and logic still see the game's camera. (Making aim agree with a moved camera is the first-person feature's job.)
  *
  * Cost per frame with no filter: one branch. With one: a world call, two reads and the filter; the search over the
- * world's units runs only while the camera unit is not known (once per world, at most 30 frames).
+ * world's units runs only while the camera unit is not known (then every 30 frames until found).
  */
 #include <math.h>
 #include <string.h>
@@ -23,11 +23,8 @@
 #define CAM_UPDATE_UNIT 0x1B2DC0u
 #define CAM_UNIT 0x9D8C0u
 #define CAM_MAIN_WORLD 0x317DE0u
-#define CAM_WORLD_UNITS 0x2305B8u /* uint32 count, then (at +8) the Unit* array */
 #define CAM_WORLD_RENDER_POSE 0x230920u
-#define CAM_UNIT_CAMERAS 0x160u   /* unit vtable: int num_cameras(unit) */
-#define CAM_UNIT_GRAPH 0xE8u      /* unit vtable: scene graph* (unit) */
-#define CAM_SEARCH_FRAMES 30
+#define CAM_RETRY_FRAMES 30       /* a search that found nothing waits this long before the next */
 
 /* The functions' first 32 bytes on build 25480438 (as HellForge's terminal camera pins them). */
 static const char kStep[] = "48 83 EC 58 33 C0 4C 8D 05 EB 71 00 01 48 89 44 24 30 48 8D 54 24 40 89 44 24 38 48 81 C1 90 01";
@@ -41,8 +38,6 @@ typedef void (*SetPoseFn)(uint32_t unit, int32_t node, const float* pose);
 typedef void (*UpdateFn)(uintptr_t world, uintptr_t unit);
 typedef uintptr_t (*UnitFn)(uint32_t unit);
 typedef uintptr_t (*WorldFn)(void);
-typedef int (*CamerasFn)(uintptr_t unit);
-typedef uintptr_t (*GraphFn)(uintptr_t unit);
 
 static StepFn g_step;
 static SetPoseFn g_setPose;
@@ -54,18 +49,16 @@ static FpvCameraFilter g_filter;
 static void* g_context;
 static uint32_t g_ref;
 static uintptr_t g_refWorld;  /* the world g_ref was found in */
-static int g_misses;
+static int g_wait;    /* frames until the next search, after one found nothing */
 static float g_nearest = -1;
 static uint32_t g_frames;
 static int g_loggedFound, g_loggedMissing;
+static uintptr_t g_frameWorld;
 
-/* The unit's scene graph poses (node 0 first); 0 when they cannot be read. */
+/* The unit's scene graph local poses (node 0 first); 0 when they cannot be read. */
 static uintptr_t Poses(uintptr_t unit)
 {
-    uintptr_t table = 0, graph = 0, poses = 0;
-    if (unit == 0 || !fpv_read(unit, &table, sizeof table) || !fpv_read(table + CAM_UNIT_GRAPH, &graph, sizeof graph) ||
-        graph == 0) return 0;
-    uintptr_t sg = ((GraphFn)graph)(unit);
+    uintptr_t sg = fpv_unit_graph(unit), poses = 0;
     return sg != 0 && fpv_read(sg + 0x20, &poses, sizeof poses) ? poses : 0;
 }
 
@@ -73,10 +66,8 @@ static uintptr_t Poses(uintptr_t unit)
  * pose cannot be read. */
 static int CameraDistanceSq(uintptr_t unit, const float* render, float* sq)
 {
-    uintptr_t table = 0, cameras = 0, poses;
-    if (unit == 0 || !fpv_read(unit, &table, sizeof table) ||
-        !fpv_read(table + CAM_UNIT_CAMERAS, &cameras, sizeof cameras) || cameras == 0) return 0;
-    if (((CamerasFn)cameras)(unit) <= 0 || (poses = Poses(unit)) == 0) return 0;
+    uintptr_t poses;
+    if (fpv_unit_cameras(unit) <= 0 || (poses = Poses(unit)) == 0) return 0;
     float pose[12];
     if (!fpv_read(poses, pose, sizeof pose)) return 0;
     float dx = pose[9] - render[12], dy = pose[10] - render[13], dz = pose[11] - render[14];
@@ -84,28 +75,26 @@ static int CameraDistanceSq(uintptr_t unit, const float* render, float* sq)
     return 1;
 }
 
-/* The main world's unit with a camera nearest the world's last render pose, within a metre (the pose is a frame old).
- * 0 when none is; g_nearest is the closest distance seen. */
+/* The main world's camera unit: its one unit with a camera (seen live on the ship and in missions), or with several the
+ * one nearest the world's last render pose. 0 when none is; g_nearest is that one's distance to the render pose. */
 static uint32_t Find(uintptr_t world)
 {
     g_nearest = -1;
-    uint32_t count = 0;
-    uintptr_t units = 0;
+    uintptr_t units;
+    uint32_t count = fpv_world_units(world, &units);
     float render[16];
-    if (!fpv_read(world + CAM_WORLD_UNITS, &count, sizeof count) ||
-        !fpv_read(world + CAM_WORLD_UNITS + 8, &units, sizeof units) ||
-        !fpv_read(world + CAM_WORLD_RENDER_POSE, render, sizeof render) || count > 100000 || units == 0) return 0;
+    if (count == 0 || !fpv_read(world + CAM_WORLD_RENDER_POSE, render, sizeof render)) return 0;
     uint32_t best = 0;
-    float bestSq = 1.0f;
+    float bestSq = -1;
     for (uint32_t i = 0; i < count; i++)
     {
-        uintptr_t unit = 0;
+        uintptr_t unit = fpv_world_unit(units, i);
         float sq;
-        if (!fpv_read(units + 8 * (uintptr_t)i, &unit, sizeof unit) || !CameraDistanceSq(unit, render, &sq)) continue;
-        if (g_nearest < 0 || sq < g_nearest * g_nearest) g_nearest = sqrtf(sq);
-        uint32_t ref = 0;
-        if (sq < bestSq && fpv_read(unit + 8, &ref, sizeof ref) && ref != 0) { best = ref; bestSq = sq; }
+        uint32_t ref;
+        if (!CameraDistanceSq(unit, render, &sq) || (ref = fpv_unit_ref(unit)) == 0) continue;
+        if (bestSq < 0 || sq < bestSq) { best = ref; bestSq = sq; }
     }
+    if (bestSq >= 0) g_nearest = sqrtf(bestSq);
     return best;
 }
 
@@ -113,19 +102,19 @@ static void Apply(void)
 {
     if (g_filter == NULL) return;
     uintptr_t world = g_world();
+    g_frameWorld = world;
     if (world == 0) return;
-    if (world != g_refWorld) { g_ref = 0; g_misses = 0; g_refWorld = world; }
+    if (world != g_refWorld) { g_ref = 0; g_wait = 0; g_refWorld = world; }
     if (g_ref == 0)
     {
-        if (g_misses >= CAM_SEARCH_FRAMES) return; /* given up for this world */
+        if (g_wait > 0) { g_wait--; return; }
         if ((g_ref = Find(world)) == 0)
         {
-            if (++g_misses == CAM_SEARCH_FRAMES)
-                fpv_log_once(&g_loggedMissing, "camera", "no camera unit at the render pose (the nearest %.2f m away)",
-                    g_nearest);
+            g_wait = CAM_RETRY_FRAMES;
+            fpv_log_once(&g_loggedMissing, "camera", "no camera unit in the main world yet (said once)");
             return;
         }
-        fpv_log_once(&g_loggedFound, "camera", "found the camera unit (%u)", g_ref);
+        fpv_log_once(&g_loggedFound, "camera", "found the camera unit (%u, %.2f m from the render pose)", g_ref, g_nearest);
     }
     uintptr_t unit = g_unit(g_ref), poses = Poses(unit);
     float game[16], pose[16];
@@ -182,11 +171,13 @@ void fpv_camera_set_filter(FpvCameraFilter filter, void* context)
 
 uintptr_t fpv_engine_unit(uint32_t unit) { return g_unit != NULL && unit != 0 ? g_unit(unit) : 0; }
 
+uintptr_t fpv_camera_world(void) { return g_frameWorld; }
+
 void fpv_camera_forget(void)
 {
     g_ref = 0;
     g_refWorld = 0;
-    g_misses = 0;
+    g_wait = 0;
 }
 
 void fpv_camera_status(FpvCameraStatus* out)
@@ -224,6 +215,7 @@ void fpv_camera_reset_for_test(void)
     g_frames = 0;
     g_nearest = -1;
     g_loggedFound = g_loggedMissing = 0;
+    g_frameWorld = 0;
     fpv_camera_forget();
 }
 #endif

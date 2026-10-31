@@ -1,4 +1,4 @@
-/* First Person's parts: the view decision (fp_view.c) and its entry (fp_mod.c). */
+/* First Person's parts: the view decision (fp_view.c), the camera (fp_camera.c) and the entry (fp_mod.c). */
 #ifndef FP_H
 #define FP_H
 
@@ -26,9 +26,9 @@ void fp_view_set_situation(uint32_t situation);
 uint32_t fp_view_situation(void);
 int fp_view_active(void);
 
-/* G1 step 1's probe (fp_probe.c): the Helldiver to log, and the camera filter that logs it (and declines the frame). */
-void fp_probe_avatar(uint32_t avatar);
-int fp_probe_filter(float* pose, void* context);
+/* The camera filter (fp_camera.c): the camera at the Helldiver's eyes while the view is First Person's. */
+void fp_camera_reset(void);
+int fp_camera_filter(float* pose, void* context);
 
 /* The table first_person_get_api returns. */
 const FirstPersonApi* fp_api_table(void);

@@ -91,6 +91,25 @@ void fpv_camera_forget(void);
 void fpv_camera_status(FpvCameraStatus* out);
 /* The engine's Unit* for a unit reference (0 when the camera is not installed or the unit is gone). */
 uintptr_t fpv_engine_unit(uint32_t unit);
+/* The main world this frame's filter runs for (0 outside a filter's frame). */
+uintptr_t fpv_camera_world(void);
+
+/* ---- units (fpv_units.c) ----------------------------------------------------------------------------------------- */
+
+uint64_t fpv_murmur64(const void* key, size_t length);
+/* An IdString32: the top 32 bits of the name's murmur64 (node names). */
+uint32_t fpv_id32(const char* name);
+uintptr_t fpv_unit_graph(uintptr_t unit);
+int fpv_unit_cameras(uintptr_t unit);
+uint32_t fpv_unit_ref(uintptr_t unit);
+uint64_t fpv_unit_resource(uintptr_t unit);
+/* The node's index by its IdString32, or -1. */
+int32_t fpv_unit_node(uintptr_t unit, uint32_t name);
+/* The node's world pose (row-major 4x4: right, forward, up, position rows). 1 read. */
+int fpv_unit_world_pose(uintptr_t unit, int32_t node, float* matrix);
+/* The world's units: the count, and *list for fpv_world_unit. */
+uint32_t fpv_world_units(uintptr_t world, uintptr_t* list);
+uintptr_t fpv_world_unit(uintptr_t list, uint32_t index);
 
 #ifdef FPV_TEST
 typedef struct FpvEngineFns
