@@ -38,6 +38,21 @@ static void CameraGoesToTheHead(void)
     CHECK_EQ(fp_view_active(), 1);
 }
 
+static void LookingDownKeepsTheEyeLevel(void)
+{
+    void (*step)(void*) = Setup();
+    FakeUnit* camera = fake_add_unit(1, 1, 0, -3, 2);
+    /* the game's camera pitched 80 degrees down: forward (0, cos, -sin), up (0, sin, cos) */
+    float c = 0.17365f, sn = 0.98481f;
+    float rows[9] = {1, 0, 0, 0, c, -sn, 0, sn, c};
+    for (int i = 0; i < 9; i++) camera->game[i] = camera->local[0][i] = rows[i];
+    FakeUnit* diver = fake_add_unit(AVATAR, 0, 0, 0, 0);
+    fake_add_node(diver, "head", 0, 0, 1.6f);
+    step(NULL);
+    CHECK(Near(fake_set_pose[11], 1.66f));   /* not sunk 0.12 m along the view */
+    CHECK(Near(fake_set_pose[10], 0.12f));   /* still ahead of the head, level */
+}
+
 static void TeammateBehindTheCameraIsNotTaken(void)
 {
     void (*step)(void*) = Setup();
@@ -210,6 +225,7 @@ static void HelldiverArrivingLaterIsFound(void)
 int main(void)
 {
     RUN(CameraGoesToTheHead);
+    RUN(LookingDownKeepsTheEyeLevel);
     RUN(TeammateBehindTheCameraIsNotTaken);
     RUN(FarCameraIsNotOnFoot);
     RUN(SwitchedOffStaysThirdPerson);

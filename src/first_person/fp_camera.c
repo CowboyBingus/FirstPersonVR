@@ -11,12 +11,13 @@
  * person. Outside a mission (the ship, the screen after a mission, whose camera can sit near the head) it is never on
  * foot.
  *
- * The eye is the head node plus the options' eye_forward along the view and eye_up (0.12 m and 0.06 m), steadied: the head's place relative to the
- * Helldiver's root (node 0) is smoothed, so the run's bob and sway are softened while the root carries the eye along at
- * once. Measured live: jogging bobs the head 13-24 cm at about 2 Hz; the height follows at FP_EYE_RATE_UP (a third of
- * that bob is left), the rest at FP_EYE_RATE. Crouching or going prone still lowers the eye within a fifth of a second. The view turns from
- * there to where the game's own line of fire hits (fp_aim.c), so the screen's centre is where shots land; without
- * that, it keeps the game camera's direction.
+ * The eye is the head node plus the options' eye_forward along the view's heading and eye_up (0.12 m and 0.06 m). The
+ * heading is level: along the full view, looking down sank the eye into the neck and shoulder armour (seen live). The
+ * eye is steadied: the head's place relative to the Helldiver's root (node 0) is smoothed, so the run's bob and sway
+ * are softened while the root carries the eye along at once. Measured live: jogging bobs the head 13-24 cm at about
+ * 2 Hz; the height follows at FP_EYE_RATE_UP (a third of that bob is left), the rest at FP_EYE_RATE. Crouching or going
+ * prone still lowers the eye within a fifth of a second. The view turns from there to where the game's own line of fire
+ * hits (fp_aim.c), so the screen's centre is where shots land; without that, it keeps the game camera's direction.
  *
  * The game's own first-person aim (middle mouse while aiming: iron sights, scopes) puts its camera at the head (0.16 m
  * from it, live); while the game's camera is within FP_GAME_SIGHTS of the head, First Person steps aside and blends to
@@ -182,7 +183,11 @@ static void FirstPersonPose(const float* game, FpvVec3 head, FpvVec3 root, int f
         g.offset.z += (offset.z - g.offset.z) * Follow(FP_EYE_RATE_UP, dt);
     }
     FpvVec3 steady = fpv_add(root, g.offset), forward = fpv_pose_forward(game), aimed;
-    FpvVec3 eye = fpv_add(steady, fpv_scale(forward, fp_options()->eye_forward));
+    FpvVec3 heading = fpv_v3(forward.x, forward.y, 0);
+    if (!fpv_normalize(&heading)) heading = fpv_pose_up(game);  /* straight down or up: the top of the view is ahead */
+    heading.z = 0;
+    if (!fpv_normalize(&heading)) heading = fpv_v3(0, 0, 0);
+    FpvVec3 eye = fpv_add(steady, fpv_scale(heading, fp_options()->eye_forward));
     eye.z += fp_options()->eye_up;
     if (fp_aim_forward(game, eye, steady, dt, &aimed) && fpv_pose_look(game, eye, aimed, fpv_v3(0, 0, 1), out)) return;
     memcpy(out, game, 16 * sizeof(float));
