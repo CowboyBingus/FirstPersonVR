@@ -154,9 +154,31 @@ static void EyeIsSteadied(void)
     diver->world[1][14] = 1.65f;                         /* a bob: the eye follows part of it in a frame */
     fpv_seconds_for_test(now += 1.0 / 60);
     step(NULL);
-    CHECK(fake_set_pose[11] > 1.661f && fake_set_pose[11] < 1.69f);
+    CHECK(fake_set_pose[11] > 1.661f && fake_set_pose[11] < 1.68f);
     for (int i = 0; i < 60; i++) { fpv_seconds_for_test(now += 1.0 / 60); step(NULL); }
     CHECK(Near(fake_set_pose[11], 1.71f));   /* and all of it once it stays */
+    fpv_seconds_for_test(-1);
+}
+
+static void GamesOwnSightsAreKept(void)
+{
+    void (*step)(void*) = Setup();
+    FakeUnit* camera = fake_add_unit(1, 1, 0, -3, 2);
+    FakeUnit* diver = fake_add_unit(AVATAR, 0, 0, 0, 0);
+    fake_add_node(diver, "head", 0, 0, 1.6f);
+    double now = Run(step, 100, 0.1);
+    CHECK(Near(fake_set_pose[10], 0.12f));
+    camera->game[10] = 0.1f;                 /* the game's first-person aim: its camera at the head */
+    camera->game[11] = 1.62f;
+    now = Run(step, now, 0.3);
+    int sets = fake_sets;
+    now = Run(step, now, 0.1);
+    CHECK_EQ(fake_sets, sets);               /* the game's sights, untouched */
+    CHECK_EQ(fp_view_active(), 1);           /* still First Person's situation */
+    camera->game[10] = -3;                   /* the aim ends */
+    camera->game[11] = 2;
+    Run(step, now, 0.3);
+    CHECK(Near(fake_set_pose[10], 0.12f));
     fpv_seconds_for_test(-1);
 }
 
@@ -183,5 +205,6 @@ int main(void)
     RUN(OutsideAMissionIsNotOnFoot);
     RUN(SwitchingBlends);
     RUN(EyeIsSteadied);
+    RUN(GamesOwnSightsAreKept);
     TEST_END();
 }

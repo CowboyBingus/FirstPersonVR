@@ -11,10 +11,15 @@
  * foot.
  *
  * The eye is the head node plus FP_EYE_FORWARD along the view and FP_EYE_UP, steadied: the head's place relative to the
- * Helldiver's root (node 0) is smoothed (FP_EYE_RATE), so the walk's bob and sway are softened while the root carries
- * the eye along at once, and crouching or going prone still lowers it within a tenth of a second. The view turns from
+ * Helldiver's root (node 0) is smoothed, so the run's bob and sway are softened while the root carries the eye along at
+ * once. Measured live: jogging bobs the head 13-24 cm at about 2 Hz; the height follows at FP_EYE_RATE_UP (a third of
+ * that bob is left), the rest at FP_EYE_RATE. Crouching or going prone still lowers the eye within a fifth of a second. The view turns from
  * there to where the game's own line of fire hits (fp_aim.c), so the screen's centre is where shots land; without
  * that, it keeps the game camera's direction.
+ *
+ * The game's own first-person aim (middle mouse while aiming: iron sights, scopes) puts its camera at the head (0.16 m
+ * from it, live); while the game's camera is within FP_GAME_SIGHTS of the head, First Person steps aside and blends to
+ * it, and comes back when the aim ends.
  *
  * Switching between the views (on foot or not, the player's toggle, a mod's request) blends over FP_BLEND_SECONDS: the
  * frame's pose is mixed between the game's and First Person's.
@@ -31,8 +36,10 @@
 #define FP_ON_FOOT_RANGE 6.0f
 #define FP_EYE_FORWARD 0.12f
 #define FP_EYE_UP 0.06f
-#define FP_EYE_RATE 12.0f       /* per second: how fast the steadied eye follows the head */
+#define FP_EYE_RATE 10.0f       /* per second: how fast the steadied eye follows the head, sideways and fore and aft */
+#define FP_EYE_RATE_UP 5.0f     /* and up and down */
 #define FP_BLEND_SECONDS 0.25f
+#define FP_GAME_SIGHTS 0.5f     /* the game's camera this near the head is its own first-person aim */
 
 static struct
 {
@@ -147,7 +154,13 @@ static void FirstPersonPose(const float* game, FpvVec3 head, FpvVec3 root, int f
 {
     FpvVec3 offset = fpv_sub(head, root);
     if (fresh) g.offset = offset;
-    else g.offset = fpv_add(g.offset, fpv_scale(fpv_sub(offset, g.offset), Follow(FP_EYE_RATE, dt)));
+    else
+    {
+        float k = Follow(FP_EYE_RATE, dt);
+        g.offset.x += (offset.x - g.offset.x) * k;
+        g.offset.y += (offset.y - g.offset.y) * k;
+        g.offset.z += (offset.z - g.offset.z) * Follow(FP_EYE_RATE_UP, dt);
+    }
     FpvVec3 steady = fpv_add(root, g.offset), forward = fpv_pose_forward(game), aimed;
     FpvVec3 eye = fpv_add(steady, fpv_scale(forward, FP_EYE_FORWARD));
     eye.z += FP_EYE_UP;
@@ -183,8 +196,9 @@ int fp_camera_filter(float* pose, void* context)
     fp_view_set_situation(onFoot ? FP_SITUATION_ON_FOOT : 0);
     int active = known && fp_view_active();
     Say(active);
+    int sights = fpv_dot(d, d) < FP_GAME_SIGHTS * FP_GAME_SIGHTS;
     int fresh = g.blend <= 0;
-    g.blend = known ? Blend(g.blend, active, dt) : 0;
+    g.blend = known ? Blend(g.blend, active && !sights, dt) : 0;
     if (g.blend <= 0) return 0;
     float game[16], view[16];
     memcpy(game, pose, sizeof game);
