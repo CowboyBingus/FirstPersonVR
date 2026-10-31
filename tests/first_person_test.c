@@ -80,6 +80,20 @@ static void TurnedAwayBodyLookingDownGoesFurtherOut(void)
     CHECK(Near(fake_set_pose[11], 1.66f));
 }
 
+static void SidewaysBodyLookingDownGoesFurtherOut(void)
+{
+    void (*step)(void*) = Setup();
+    FakeUnit* camera = fake_add_unit(1, 1, -3, 0, 2);
+    /* the view to +X (strafing) and 80 degrees down; the body faces +Y, where it runs */
+    float c = 0.17365f, sn = 0.98481f;
+    float rows[9] = {0, -1, 0, c, 0, -sn, sn, 0, c};
+    for (int i = 0; i < 9; i++) camera->game[i] = camera->local[0][i] = rows[i];
+    FakeUnit* diver = fake_add_unit(AVATAR, 0, 0, 0, 0);
+    fake_add_node(diver, "head", 0, 0, 1.6f);
+    step(NULL);
+    CHECK(fake_set_pose[9] > 0.4f && fake_set_pose[9] < 0.5f);  /* clear of the shoulder and arm */
+}
+
 static void TeammateBehindTheCameraIsNotTaken(void)
 {
     void (*step)(void*) = Setup();
@@ -272,6 +286,7 @@ int main(void)
     RUN(LookingDownKeepsTheEyeLevel);
     RUN(TurnedAwayBodyLevelViewStaysAtTheHead);
     RUN(TurnedAwayBodyLookingDownGoesFurtherOut);
+    RUN(SidewaysBodyLookingDownGoesFurtherOut);
     RUN(TeammateBehindTheCameraIsNotTaken);
     RUN(FarCameraIsNotOnFoot);
     RUN(SwitchedOffStaysThirdPerson);
