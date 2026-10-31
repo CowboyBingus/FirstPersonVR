@@ -4,7 +4,9 @@
  * camera follows the local player's Helldiver and looks over its shoulder, so a teammate standing behind the camera,
  * nearer than ours, is not taken; one behind counts only when none is in front; fpv_units.c has the layout). Kept by its place in the world's unit array and checked every
  * frame there (same Unit*, reference and resource), so a destroyed Helldiver is noticed without calling the engine with
- * a stale reference; looked for again every 30 frames while there is none.
+ * a stale reference; looked for again every 30 frames while there is none, and while the one kept is farther from the
+ * camera than on foot: a dead Helldiver's body stays in the world as the same unit, and the camera follows the
+ * reinforced one (seen live: the view stayed third person after a reinforcement).
  *
  * The situation: on foot in a mission while the game's camera is within FP_ON_FOOT_RANGE of the head (its
  * over-the-shoulder camera); anything else (vehicles, the hellpod, cutscenes, the map) is not known yet and stays third
@@ -51,6 +53,7 @@ static struct
     uint32_t index, ref;
     int32_t head;
     int wait;
+    int away;            /* frames the Helldiver kept has been too far from the camera to be on foot */
     int active;          /* last frame's view was First Person's */
     float blend;         /* 0 the game's view .. 1 First Person's */
     FpvVec3 offset;      /* the steadied head, relative to the root */
@@ -216,6 +219,20 @@ static float Blend(float blend, int active, float dt)
     return blend < 0 ? 0 : blend > 1 ? 1 : blend;
 }
 
+/* On foot: in a mission, with the camera within FP_ON_FOOT_RANGE of the head (d: head - camera). A Helldiver kept but
+ * too far for FP_SEARCH_FRAMES is let go, so the next frame looks again. */
+static int OnFoot(int known, int mission, FpvVec3 d)
+{
+    int close = fpv_dot(d, d) < FP_ON_FOOT_RANGE * FP_ON_FOOT_RANGE;
+    g.away = known && !close ? g.away + 1 : 0;
+    if (g.away >= FP_SEARCH_FRAMES)
+    {
+        g.unit = 0;
+        g.away = 0;
+    }
+    return known && mission && close;
+}
+
 int fp_camera_filter(float* pose, void* context)
 {
 #ifdef FPV_PROBE
@@ -230,7 +247,7 @@ int fp_camera_filter(float* pose, void* context)
     int known = Keep(fpv_camera_world(), pose) && Head(&head, &root, &facing);
     FpvVec3 d = known ? fpv_sub(head, camera) : fpv_v3(0, 0, 0);
     int mission = fpv_in_mission();
-    int onFoot = known && mission && fpv_dot(d, d) < FP_ON_FOOT_RANGE * FP_ON_FOOT_RANGE;
+    int onFoot = OnFoot(known, mission, d);
     fp_view_set_situation(onFoot ? FP_SITUATION_ON_FOOT : 0);
     int active = known && fp_view_active();
     Say(active, known, mission, sqrtf(fpv_dot(d, d)));

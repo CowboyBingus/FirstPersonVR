@@ -131,6 +131,23 @@ static void DestroyedHelldiverIsNoticed(void)
     CHECK_LOG("[camera] third person");
 }
 
+static void ReinforcedHelldiverIsTaken(void)
+{
+    void (*step)(void*) = Setup();
+    FakeUnit* camera = fake_add_unit(1, 1, 0, -3, 2);
+    FakeUnit* body = fake_add_unit(AVATAR, 0, 0, 0, 0);  /* dies, and its body stays */
+    fake_add_node(body, "head", 0, 0, 1.6f);
+    step(NULL);
+    CHECK_LOG("the Helldiver: unit 101");
+    camera->game[9] = 50;                     /* the camera follows the reinforcement far away */
+    FakeUnit* diver = fake_add_unit(AVATAR, 0, 50, 0, 0);
+    fake_add_node(diver, "head", 50, 0, 1.6f);
+    for (int i = 0; i < 40; i++) step(NULL);
+    CHECK_LOG("the Helldiver: unit 102");
+    CHECK(Near(fake_set_pose[9], 50));
+    CHECK_EQ(fp_view_active(), 1);
+}
+
 static void NoHeadNoFirstPerson(void)
 {
     void (*step)(void*) = Setup();
@@ -259,6 +276,7 @@ int main(void)
     RUN(FarCameraIsNotOnFoot);
     RUN(SwitchedOffStaysThirdPerson);
     RUN(DestroyedHelldiverIsNoticed);
+    RUN(ReinforcedHelldiverIsTaken);
     RUN(NoHeadNoFirstPerson);
     RUN(HelldiverArrivingLaterIsFound);
     RUN(OutsideAMissionIsNotOnFoot);
