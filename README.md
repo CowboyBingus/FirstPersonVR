@@ -9,9 +9,8 @@ Two HellForge code mods for HELLDIVERS 2, each its own switch on the Mods page:
 
 Both change your own view only, so friends and lobbies do not need them.
 
-The mods are in progress. G0, the scaffold, is done: both load, hook the engine's render step so the camera can be
-moved for a frame, and First Person's API takes requests; neither moves the camera yet, so nothing in the game
-changes. [docs/plan.md](docs/plan.md) has the groups and what each one is tested with.
+The mods are in progress. First Person puts the camera at the Helldiver's eyes on foot in missions (seen in game
+2026-10-31); aim, the helmet and arms, options and the other situations are next. VR Mode loads and does nothing yet. [docs/plan.md](docs/plan.md) has the groups and what each one is tested with.
 
 ## Requirements
 

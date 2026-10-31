@@ -20,12 +20,13 @@ says what that covers and what only a tester can check.
   looks it up at game load.
 - Tests: the camera search and filter against a fake world; the pose math; the view decision and the API table.
 
-## G1: first person (on foot)
+## G1: first person (on foot): in progress
 
-1. **The diver.** The local player's avatar unit, and its head node (Unit.node by name; candidates come from the
-   avatar's skeleton). Logged at the first mission.
-2. **The camera on the head.** A filter puts the camera at the head node plus an offset (options), facing where the game's
-   camera faces. Its pitch and yaw stay the game's, so the reticle's direction is unchanged.
+1. **The diver** (done, live). The Helldiver unit by its resource nearest the game's camera, its head node by name
+   hash ([findings.md](findings.md)).
+2. **The camera on the head** (done, live). The camera at the head node, 0.12 m forward and 0.06 m up, facing where
+   the game's camera faces, so the direction the game aims along is unchanged. Third person again when the Helldiver
+   dies (the game's camera moves away from the head).
 3. **No head in the view.** The helmet, head and cape meshes hidden for the local player's camera only
    (Unit.set_mesh_visibility, proved by Difficulty 11 Plus), shown again when first person turns off. Shadows keep them if
    the engine allows it.
