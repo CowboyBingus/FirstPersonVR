@@ -32,7 +32,10 @@ static struct
     int wait;
     int active;          /* last frame's view was First Person's */
     int loggedHead;
+    int searches;        /* searches that found no Helldiver, logged for the first FP_SEARCHES_LOGGED */
 } g;
+
+#define FP_SEARCHES_LOGGED 5
 
 void fp_camera_reset(void)
 {
@@ -49,30 +52,50 @@ static int StillThere(uintptr_t world)
         fpv_unit_ref(g.unit) == g.ref && fpv_unit_resource(g.unit) == FP_AVATAR;
 }
 
+/* 0: not a Helldiver; 1: a Helldiver whose root does not read; 2: one at *sq (squared metres) from the camera. */
+static int AvatarDistance(uintptr_t unit, FpvVec3 camera, float* sq)
+{
+    float root[16];
+    if (unit == 0 || fpv_unit_resource(unit) != FP_AVATAR) return 0;
+    if (!fpv_unit_world_pose(unit, 0, root)) return 1;
+    FpvVec3 d = fpv_sub(fpv_v3(root[12], root[13], root[14]), camera);
+    *sq = fpv_dot(d, d);
+    return 2;
+}
+
+/* The Helldiver found: its reference and head node, or no Helldiver after all when it has no head. */
+static void Take(float distanceSq)
+{
+    g.ref = fpv_unit_ref(g.unit);
+    g.head = fpv_unit_node(g.unit, fpv_id32("head"));
+    if (g.head < 0) { fpv_log_once(&g.loggedHead, "camera", "the Helldiver has no head node"); g.unit = 0; return; }
+    fpv_log("camera", "the Helldiver: unit %u, head node %d, %.2f m from the camera", g.ref, g.head, sqrtf(distanceSq));
+}
+
 static void Search(uintptr_t world, FpvVec3 camera)
 {
     g.unit = 0;
     g.world = world;
     uintptr_t units;
-    uint32_t count = fpv_world_units(world, &units);
-    float bestSq = FP_SEARCH_RANGE * FP_SEARCH_RANGE;
+    uint32_t count = fpv_world_units(world, &units), avatars = 0;
+    float bestSq = FP_SEARCH_RANGE * FP_SEARCH_RANGE, nearestSq = -1;
     for (uint32_t i = 0; i < count; i++)
     {
         uintptr_t unit = fpv_world_unit(units, i);
-        float root[16];
-        if (unit == 0 || fpv_unit_resource(unit) != FP_AVATAR || !fpv_unit_world_pose(unit, 0, root)) continue;
-        FpvVec3 d = fpv_sub(fpv_v3(root[12], root[13], root[14]), camera);
-        float sq = fpv_dot(d, d);
+        float sq = 0;
+        int kind = AvatarDistance(unit, camera, &sq);
+        avatars += kind != 0;
+        if (kind != 2) continue;
+        if (nearestSq < 0 || sq < nearestSq) nearestSq = sq;
         if (sq >= bestSq) continue;
         bestSq = sq;
         g.unit = unit;
         g.index = i;
     }
-    if (g.unit == 0) return;
-    g.ref = fpv_unit_ref(g.unit);
-    g.head = fpv_unit_node(g.unit, fpv_id32("head"));
-    if (g.head < 0) { fpv_log_once(&g.loggedHead, "camera", "the Helldiver has no head node"); g.unit = 0; return; }
-    fpv_log("camera", "the Helldiver: unit %u, head node %d, %.2f m from the camera", g.ref, g.head, sqrtf(bestSq));
+    if (g.unit != 0) { Take(bestSq); return; }
+    if (g.searches++ < FP_SEARCHES_LOGGED)
+        fpv_log("camera", "no Helldiver near the camera: %u units, %u Helldivers, the nearest %.1f m away (camera at %.1f %.1f %.1f)",
+            count, avatars, nearestSq < 0 ? -1.0f : sqrtf(nearestSq), camera.x, camera.y, camera.z);
 }
 
 /* The head's world position, or 0 when it cannot be read. */

@@ -52,7 +52,7 @@ static uintptr_t g_refWorld;  /* the world g_ref was found in */
 static int g_wait;    /* frames until the next search, after one found nothing */
 static float g_nearest = -1;
 static uint32_t g_frames;
-static int g_loggedFound, g_loggedMissing;
+static int g_loggedFound, g_loggedMissing, g_loggedLost;
 static uintptr_t g_frameWorld;
 
 /* The unit's scene graph local poses (node 0 first); 0 when they cannot be read. */
@@ -118,7 +118,12 @@ static void Apply(void)
     }
     uintptr_t unit = g_unit(g_ref), poses = Poses(unit);
     float game[16], pose[16];
-    if (poses == 0 || !fpv_read(poses, game, sizeof game)) { g_ref = 0; return; } /* looked for again next frame */
+    if (poses == 0 || !fpv_read(poses, game, sizeof game))
+    {
+        fpv_log_once(&g_loggedLost, "camera", "the camera unit %u has no readable pose (said once)", g_ref);
+        g_ref = 0; /* looked for again next frame */
+        return;
+    }
     memcpy(pose, game, sizeof pose);
     if (!g_filter(pose, g_context)) return;
     g_setPose(g_ref, 0, pose);
@@ -214,7 +219,7 @@ void fpv_camera_reset_for_test(void)
     g_context = NULL;
     g_frames = 0;
     g_nearest = -1;
-    g_loggedFound = g_loggedMissing = 0;
+    g_loggedFound = g_loggedMissing = g_loggedLost = 0;
     g_frameWorld = 0;
     fpv_camera_forget();
 }
