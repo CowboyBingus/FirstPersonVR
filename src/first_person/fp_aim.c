@@ -6,9 +6,11 @@
  *
  * The ray: the engine's synchronous raycast, the physics interface's slot +104 (*(game.dll+0x3326328) + 0x68 =
  * helldivers2.exe+0x77DEC0): int (u32 query, const float from[3], const float dir[3], float length, int 0,
- * float result[16], int 1), nonzero on a hit with its position at result[0..2]. The query is the prebuilt one the game
- * uses for its own ground and line-of-sight rays (game.dll+0x84B692, +0x9DA45D): *(*(game.dll+0x346D508)+8)+0xA4.
- * The ray starts a little past the diver along the line, so it never hits the diver itself.
+ * float result[16], int 1), nonzero on a hit with its position at result[0..2]. The query: an id 0x80000000 | i names
+ * row i of the engine's query table (exe+0x27B9440, 20 bytes a row: mode, ?, ?, query name hash, flags); row 4 is
+ * damage_los_query (0x2315515D, mode 1: the closest hit), the damage line of sight, so what shots stop at. (Row 7, which
+ * the game's ground rays use, passes through props: tried live 2026-10-31.) The ray starts a little past the diver
+ * along the line, so it never hits the diver itself.
  *
  * d is smoothed: it follows a nearer hit within a frame or two and eases out to a farther one, so the view does not
  * twitch when the line crosses an edge. Cost per frame: one raycast and a few flops.
@@ -20,8 +22,10 @@
 #define AIM_PHYSICS 0x3326328u
 #define AIM_PHYSICS_SLOT 0x68u
 #define AIM_RAYCAST 0x77DEC0u
-#define AIM_WORLD 0x346D508u
-#define AIM_QUERY 0xA4u
+#define AIM_QUERIES 0x27B9440u
+#define AIM_QUERY_ROW 4u
+#define AIM_QUERY_ID (0x80000000u | AIM_QUERY_ROW)
+#define AIM_QUERY_NAME 0x2315515Du /* damage_los_query */
 #define AIM_RANGE 400.0f
 #define AIM_PAST_DIVER 0.6f       /* metres past the diver's head, along the line, where the ray starts */
 #define AIM_NEAR 1.0f             /* a target nearer the eye than this is not turned towards */
@@ -55,6 +59,9 @@ static const char* Check(void)
         return "no physics interface";
     if (!fpv_read(physics + AIM_PHYSICS_SLOT, &slot, sizeof slot) || slot != host->exe_base + AIM_RAYCAST)
         return "the physics interface's ray is another function";
+    uint32_t name = 0;
+    if (!fpv_read(host->exe_base + AIM_QUERIES + AIM_QUERY_ROW * 20 + 12, &name, sizeof name) || name != AIM_QUERY_NAME)
+        return "the query table's row 4 is not damage_los_query";
     g.raycast = (RaycastFn)slot;
     return NULL;
 }
@@ -87,13 +94,7 @@ static uint32_t Query(void)
 #ifdef FPV_TEST
     if (g_testQuery != 0) return g_testQuery;
 #endif
-    uintptr_t world = 0, physics = 0;
-    uint32_t query = 0;
-    uintptr_t game = fpv_host()->game_base;
-    if (!fpv_read(game + AIM_WORLD, &world, sizeof world) || world == 0 ||
-        !fpv_read(world + 8, &physics, sizeof physics) || physics == 0 ||
-        !fpv_read(physics + AIM_QUERY, &query, sizeof query)) return 0;
-    return query;
+    return AIM_QUERY_ID;
 }
 
 /* The distance along the game's line (from `from`, along unit `dir`) to what it hits, or AIM_RANGE. */
