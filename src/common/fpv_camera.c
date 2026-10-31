@@ -54,6 +54,22 @@ static float g_nearest = -1;
 static uint32_t g_frames;
 static int g_loggedFound, g_loggedMissing, g_loggedLost;
 static uintptr_t g_frameWorld;
+/* A status line every CAM_STATUS_FRAMES frames, the first CAM_STATUS_LINES times: what the hook did since the last. */
+#define CAM_STATUS_FRAMES 900
+#define CAM_STATUS_LINES 12
+static struct { uint32_t frames, noWorld, finds, found, noUnit, noGraph, noPoses, filtered, lines; } g_diag;
+
+static void Status(uintptr_t world)
+{
+    if (++g_diag.frames < CAM_STATUS_FRAMES || g_diag.lines >= CAM_STATUS_LINES) return;
+    g_diag.lines++;
+    fpv_log("camera", "status: %u frames, world %p, %u without a world, %u searches (%u found), camera %u: %u unit misses, "
+        "%u graph misses, %u pose misses, %u filtered", g_diag.frames, (void*)world, g_diag.noWorld, g_diag.finds, g_diag.found,
+        g_ref, g_diag.noUnit, g_diag.noGraph, g_diag.noPoses, g_diag.filtered);
+    uint32_t lines = g_diag.lines;
+    memset(&g_diag, 0, sizeof g_diag);
+    g_diag.lines = lines;
+}
 
 /* The unit's scene graph local poses (node 0 first); 0 when they cannot be read. */
 static uintptr_t Poses(uintptr_t unit)
@@ -103,28 +119,35 @@ static void Apply(void)
     if (g_filter == NULL) return;
     uintptr_t world = g_world();
     g_frameWorld = world;
-    if (world == 0) return;
+    Status(world);
+    if (world == 0) { g_diag.noWorld++; return; }
     if (world != g_refWorld) { g_ref = 0; g_wait = 0; g_refWorld = world; }
     if (g_ref == 0)
     {
         if (g_wait > 0) { g_wait--; return; }
+        g_diag.finds++;
         if ((g_ref = Find(world)) == 0)
         {
             g_wait = CAM_RETRY_FRAMES;
             fpv_log_once(&g_loggedMissing, "camera", "no camera unit in the main world yet (said once)");
             return;
         }
+        g_diag.found++;
         fpv_log_once(&g_loggedFound, "camera", "found the camera unit (%u, %.2f m from the render pose)", g_ref, g_nearest);
     }
     uintptr_t unit = g_unit(g_ref), poses = Poses(unit);
     float game[16], pose[16];
+    if (unit == 0) g_diag.noUnit++;
+    else if (fpv_unit_graph(unit) == 0) g_diag.noGraph++;
     if (poses == 0 || !fpv_read(poses, game, sizeof game))
     {
+        g_diag.noPoses++;
         fpv_log_once(&g_loggedLost, "camera", "the camera unit %u has no readable pose (said once)", g_ref);
         g_ref = 0; /* looked for again next frame */
         return;
     }
     memcpy(pose, game, sizeof pose);
+    g_diag.filtered++;
     if (!g_filter(pose, g_context)) return;
     g_setPose(g_ref, 0, pose);
     g_update(world, unit);
@@ -221,6 +244,7 @@ void fpv_camera_reset_for_test(void)
     g_nearest = -1;
     g_loggedFound = g_loggedMissing = g_loggedLost = 0;
     g_frameWorld = 0;
+    memset(&g_diag, 0, sizeof g_diag);
     fpv_camera_forget();
 }
 #endif
