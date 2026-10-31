@@ -38,6 +38,7 @@
 #define FP_ON_FOOT_RANGE 6.0f
 #define FP_EYE_RATE 10.0f       /* per second: how fast the steadied eye follows the head, sideways and fore and aft */
 #define FP_EYE_RATE_UP 5.0f     /* and up and down */
+#define FP_EYE_UP_OUT 0.15f     /* metres further out along the heading, looking straight up */
 #define FP_BLEND_SECONDS 0.25f
 #define FP_GAME_SIGHTS 0.5f     /* the game's camera this near the head is its own first-person aim */
 
@@ -187,7 +188,10 @@ static void FirstPersonPose(const float* game, FpvVec3 head, FpvVec3 root, int f
     if (!fpv_normalize(&heading)) heading = fpv_pose_up(game);  /* straight down or up: the top of the view is ahead */
     heading.z = 0;
     if (!fpv_normalize(&heading)) heading = fpv_v3(0, 0, 0);
-    FpvVec3 eye = fpv_add(steady, fpv_scale(heading, fp_options()->eye_forward));
+    /* Looking up, the helmet's brim hangs over the eye (seen live): the eye goes further out, up to FP_EYE_UP_OUT more
+     * looking straight up. */
+    float ahead = fp_options()->eye_forward + FP_EYE_UP_OUT * (forward.z > 0 ? forward.z : 0);
+    FpvVec3 eye = fpv_add(steady, fpv_scale(heading, ahead));
     eye.z += fp_options()->eye_up;
     if (fp_aim_forward(game, eye, steady, dt, &aimed) && fpv_pose_look(game, eye, aimed, fpv_v3(0, 0, 1), out)) return;
     memcpy(out, game, 16 * sizeof(float));

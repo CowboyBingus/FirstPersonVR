@@ -72,6 +72,8 @@ What the mods rely on, and how each fact was established. "Live" means read in t
 
 - Jogging bobs the head 13-24 cm up and down at about 2 Hz relative to the root (node 0), and 5-25 cm fore and aft.
 - Prone puts the head 0.41 m above the root.
+- Looking down with the eye offset along the full view sank it into the neck (clipped shoulder armour and chest in
+  view); looking up put the helmet's brim over the view. The offset is level, and 0.15 m further out looking straight up.
 - The screen after a mission (the squad's cards) has its camera 1.6 m from the head: a distance alone is not "on foot".
 
 ## HellForge sessions
