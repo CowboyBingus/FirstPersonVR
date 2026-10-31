@@ -198,9 +198,10 @@ static void FirstPersonPose(const float* game, FpvVec3 head, FpvVec3 root, FpvVe
     if (!fpv_normalize(&heading)) heading = facing;
     /* Further out looking up (the helmet's brim hangs over the eye), and looking down while the body faces away from
      * the view: after a quick turn or running back towards the camera the back and the backpack were under the eye,
-     * strafing the shoulder and arm (all seen live). Away: 0 facing the view, 1 at right angles and beyond. */
+     * strafing or running diagonally the shoulder and arm (all seen live). Away: 0 facing the view, a half at 45
+     * degrees, 1 at right angles and beyond. */
     float along = fpv_dot(facing, heading);
-    float away = fpv_dot(facing, facing) > 0 ? 1 - (along > 0 ? along : 0) : 0;
+    float away = fpv_dot(facing, facing) > 0 ? 1 - (along > 0 ? along * along : 0) : 0;
     float ahead = fp_options()->eye_forward + FP_EYE_UP_OUT * (forward.z > 0 ? forward.z : 0) +
         FP_EYE_AWAY_OUT * away * (forward.z < 0 ? -forward.z : 0);
     FpvVec3 eye = fpv_add(steady, fpv_scale(heading, ahead));
