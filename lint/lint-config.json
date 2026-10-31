@@ -1,0 +1,20 @@
+{
+  "format": 1,
+  "note": "HellForge's C lint over First Person VR: run scripts/lint.sh.",
+  "sdk_header": "../HellForge/native/mod-sdk/hellforge_mod.h",
+  "discover": [],
+  "default_sources": [
+    "src/**/*.c",
+    "src/**/*.h"
+  ],
+  "default_tests": [
+    "tests/**/*.c",
+    "tests/**/*.h"
+  ],
+  "units": [
+    {
+      "name": "first-person-vr",
+      "path": "."
+    }
+  ]
+}
