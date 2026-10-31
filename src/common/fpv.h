@@ -1,5 +1,5 @@
-/* First Person VR: what the features share. fpv_mod.c is the only file that includes hellforge_mod.h; everything else
- * reaches the game through FpvHost (filled at hellforge_mod_init, or by a test).
+/* What the two mods (First Person, VR Mode) share. They reach the game through FpvHost (filled by fpv_host_init, or by
+ * a test); only fpv_host.c and the mods' entry files include hellforge_mod.h (through fpv_init.h).
  *
  * Poses are the engine's scene-graph local poses, 16 floats: rotation rows right (0-2), forward (3-5), up (6-8), then
  * position (9-11), scale (12-14) and one float the engine keeps (15). Stingray is Z-up and right-handed.
@@ -10,8 +10,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define FPV_MOD_NAME "First Person VR"
-#define FPV_MOD_VERSION "0.1.0"
+#define FPV_VERSION "0.1.0"
 #define FPV_GAME_BUILD "25480438"
 
 typedef struct FpvHost
@@ -19,7 +18,7 @@ typedef struct FpvHost
     void (*log)(const char* feature, const char* text);
     int (*read)(uintptr_t address, void* out, size_t size);              /* 1 read, 0 not */
     int (*code_matches)(uintptr_t address, const char* pattern);         /* 1 the unhooked bytes match */
-    int (*hook)(uintptr_t target, const char* shipped, void* detour, void** original); /* 1 hooked */
+    int (*hook)(uintptr_t target, const char* shipped, void* detour, void** original, int32_t priority); /* 1 hooked */
     uintptr_t exe_base;
     size_t exe_size;
 } FpvHost;
@@ -32,8 +31,8 @@ FpvHost* fpv_host_for_test(void);
 void fpv_log(const char* feature, const char* format, ...);
 void fpv_log_once(int* logged, const char* feature, const char* format, ...);
 int fpv_read(uintptr_t address, void* out, size_t size);
-/* hook at helldivers2.exe + rva, after its unhooked bytes match `shipped`. 1 hooked, 0 refused. */
-int fpv_exe_hook(uint32_t rva, const char* shipped, void* detour, void** original);
+/* hook_ex at helldivers2.exe + rva, after its unhooked bytes match `shipped`. 1 hooked, 0 refused. */
+int fpv_exe_hook(uint32_t rva, const char* shipped, void* detour, void** original, int32_t priority);
 /* 1 when the unhooked bytes at helldivers2.exe + rva match the pattern. */
 int fpv_exe_matches(uint32_t rva, const char* pattern);
 
@@ -77,8 +76,13 @@ typedef struct FpvCameraStatus
     uint32_t frames;     /* frames the filter changed */
 } FpvCameraStatus;
 
+/* The render step's hook priorities: First Person's filter runs before VR Mode's, so VR adds the head to First Person's
+ * camera (each mod hooks the step itself; HellForge chains them, highest priority first). */
+#define FPV_PRIORITY_FIRST_PERSON 20
+#define FPV_PRIORITY_VR 10
+
 /* Hooks the engine's script render step (once). 1 installed, 0 refused. */
-int fpv_camera_install(void);
+int fpv_camera_install(int32_t priority);
 void fpv_camera_set_filter(FpvCameraFilter filter, void* context);
 /* Forget the camera unit (the world changed): it is looked for again on the next frame that needs it. */
 void fpv_camera_forget(void);

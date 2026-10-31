@@ -1,7 +1,7 @@
 /* The camera override: build 25480438's script render step, hooked, so a filter can move the camera for the frame.
  *
  * Found for HellForge's terminal camera (HellForge native/mod-loader/terminal_camera.c, which hooks the same step; the
- * two hooks chain, this mod's first): the camera is a unit's, the main world's unit with a camera whose pose is the
+ * hooks chain, the mods' first): the camera is a unit's, the main world's unit with a camera whose pose is the
  * world's last render pose (world + 0x230920, a row-major 4x4). The game's camera code sets that unit's pose every
  * frame before the engine's script render step (exe+0x689BC0), and the render copies the camera unit's world pose to the
  * world's render pose. A pose set before the step is the one the frame renders with. So before the step the camera
@@ -144,7 +144,7 @@ static void StepDetour(void* app)
     g_step(app);
 }
 
-int fpv_camera_install(void)
+int fpv_camera_install(int32_t priority)
 {
     if (g_installed) return g_installed == 1;
     g_installed = -1;
@@ -164,7 +164,7 @@ int fpv_camera_install(void)
     g_update = (UpdateFn)(host->exe_base + CAM_UPDATE_UNIT);
     g_unit = (UnitFn)(host->exe_base + CAM_UNIT);
     g_world = (WorldFn)(host->exe_base + CAM_MAIN_WORLD);
-    if (!fpv_exe_hook(CAM_RENDER_STEP, kStep, (void*)StepDetour, (void**)&g_step))
+    if (!fpv_exe_hook(CAM_RENDER_STEP, kStep, (void*)StepDetour, (void**)&g_step, priority))
     {
         fpv_log("camera", "off: the render step could not be hooked");
         return 0;

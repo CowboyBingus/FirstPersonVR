@@ -1,0 +1,12 @@
+{
+  "format": 1,
+  "id": "cowboybingus.first-person",
+  "name": "First Person",
+  "version": "0.1.0",
+  "description": "A first-person camera for HELLDIVERS 2 on HellForge. Other mods can ask it for first person in vehicles, mechs and more. Your own view only: friends need not have it.",
+  "gameplay": false,
+  "code": {
+    "dll": "first_person.dll",
+    "sdk": 13
+  }
+}

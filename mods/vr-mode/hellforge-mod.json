@@ -1,0 +1,12 @@
+{
+  "format": 1,
+  "id": "cowboybingus.vr-mode",
+  "name": "VR Mode",
+  "version": "0.1.0",
+  "description": "Seated VR for HELLDIVERS 2 on HellForge (OpenXR). With First Person on, you see through the diver's eyes; without it, the game's own camera in VR. Your own view only: friends need not have it.",
+  "gameplay": false,
+  "code": {
+    "dll": "vr_mode.dll",
+    "sdk": 13
+  }
+}

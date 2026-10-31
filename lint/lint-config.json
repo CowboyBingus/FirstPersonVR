@@ -5,6 +5,7 @@
   "discover": [],
   "default_sources": [
     "src/**/*.c",
+    "include/**/*.h",
     "src/**/*.h"
   ],
   "default_tests": [

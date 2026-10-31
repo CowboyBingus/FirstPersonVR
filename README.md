@@ -1,23 +1,46 @@
-# First Person VR for HellForge
+# First Person and VR Mode for HellForge
 
-A HellForge code mod, one DLL, that gives HELLDIVERS 2 a first-person camera, and later seated VR on top of it. It
-changes your own view only, so friends and lobbies do not need it.
+Two HellForge code mods for HELLDIVERS 2, each its own switch on the Mods page:
 
-The mod is in progress. G0, the scaffold, is done: the mod loads and hooks the engine's render step so the camera can be
-moved for a frame, but it sets no camera yet and changes nothing in the game. [docs/plan.md](docs/plan.md) has the
-groups and what each one is tested with.
+- **First Person** (`mods/first-person`): a first-person camera. Other mods can ask it for first person, or third
+  person, in a situation such as driving a vehicle ([For mod authors](#for-mod-authors)).
+- **VR Mode** (`mods/vr-mode`): seated VR through OpenXR. With First Person on, you see through the diver's eyes;
+  without it, the game's own camera in VR.
+
+Both change your own view only, so friends and lobbies do not need them.
+
+The mods are in progress. G0, the scaffold, is done: both load, hook the engine's render step so the camera can be
+moved for a frame, and First Person's API takes requests; neither moves the camera yet, so nothing in the game
+changes. [docs/plan.md](docs/plan.md) has the groups and what each one is tested with.
 
 ## Requirements
 
 - HellForge with mod SDK 13 or newer, on game build 25480438 only.
 
+## For mod authors
+
+Copy [include/first_person_api.h](include/first_person_api.h) into your mod. After `HF_EVENT_GAME_LOADED`, on the game
+thread:
+
+```c
+const FirstPersonApi* fp = first_person_api_find(); /* NULL: First Person is not loaded */
+if (fp != NULL)
+    g_request = fp->request("my-vehicle-mod", FP_SITUATION_VEHICLE, FP_VIEW_FIRST, 0);
+/* ... and when your mod no longer wants it: */
+if (fp != NULL) fp->release(g_request);
+```
+
+In each situation the held request with the highest priority decides (equal priorities: the latest one); with none,
+the player's settings do. The player stays in charge: with First Person switched off, or "mods may change the view" off
+in its options, requests are kept but not used. The header documents every function.
+
 ## Building and checks
 
 ```bash
-bash scripts/build.sh           # first_person_vr.dll beside hellforge-mod.json
-bash scripts/build.sh --test    # the DLL and every tests/*_test.c, run under Proton Experimental's wine
+bash scripts/build.sh           # mods/first-person/first_person.dll and mods/vr-mode/vr_mode.dll
+bash scripts/build.sh --test    # the DLLs and every tests/*_test.c, run under Proton Experimental's wine
 bash scripts/lint.sh            # HellForge's structure lint
-bash scripts/package.sh         # a test-build zip; never publish it
+bash scripts/package.sh         # a test-build zip of each mod; never publish them
 ```
 
 `scripts/build.sh` uses Zig at `~/.local/share/zig-native/zig` (or `$HELLFORGE_ZIG`, or `--zig`), and the mod SDK of a
