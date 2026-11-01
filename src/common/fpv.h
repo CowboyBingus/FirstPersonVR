@@ -101,6 +101,9 @@ void fpv_camera_set_filter(FpvCameraFilter filter, void* context);
 /* Called after each frame's render step (whether or not the filter changed the frame): a filter that changed the scene
  * for the render puts it back here. */
 void fpv_camera_set_after(void (*after)(void* context));
+/* Called right after the main world's scene update each frame (before the game's logic and the render step), with
+ * fpv_unit_update working on the main world. */
+void fpv_camera_set_after_scene(void (*after)(float dt));
 /* Forget the camera unit (the world changed): it is looked for again on the next frame that needs it. */
 void fpv_camera_forget(void);
 void fpv_camera_status(FpvCameraStatus* out);

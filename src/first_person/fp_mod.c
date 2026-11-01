@@ -19,6 +19,7 @@ static void OnGameLoaded(HfMod* mod, HfEvent event, void* user)
     {
         fpv_camera_set_filter(fp_camera_filter, NULL);
         fpv_camera_set_after(fp_camera_after);
+        fpv_camera_set_after_scene(fp_camera_after_scene);
     }
 #ifdef FPV_PROBE
     fp_probe_install();

@@ -89,6 +89,7 @@ What the mods rely on, and how each fact was established. "Live" means read in t
 - Recordings come from the scene, so the scene's capture must be fitted to the canvas (bounds type scale-inner at the
   canvas size). Fitted to 1920x1080 on a 1280x720 canvas, clips showed the top-left part of the window and the weapon
   looked pushed to the edge. Single screenshots catch one frame in ten or so: flicker needs a clip, frame by frame.
+- The light preset caps the game at 30 fps; motion (walking, turning) is judged at 60 (`HD2H_FRAMERATE=60`, OBS at 60).
 - The harness's test-input mod drives the engine's keyboard and mouse (`harness.py input`): W walks, the mouse buttons
   aim and fire, `look` turns, Z goes prone, G throws. Left Ctrl did not crouch, and X did not emote, standing on the
   hellpod.
@@ -150,6 +151,18 @@ What the mods rely on, and how each fact was established. "Live" means read in t
 - The barrel against the body's facing on a Liberator with a scope: idle 59 degrees, walking 60-70, strafing 51-63, a
   melee 96. A window at 58-75 dropped the weapon in and out while walking; it is 85-100 now and must hold a tenth of a
   second (a walk's sway spikes for a frame).
+- The renderer reads the skinned meshes' bones (the gloves, the armour, parts of the weapon) on its own thread at
+  times of its own, not at the render step. Copying the world poses back after the render step drew the gloves at the
+  hip in most frames (on the weapon in some: the flicker); leaving them, the game's next scene update sometimes got
+  there first (the weapon missing in some frames). The pose is applied again right after the main world's scene update
+  (exe+0x1B0B10, called by World.update_scene exe+0x3ED660; `(world, dt, scale)`), at the last render's ready place
+  kept in the head's frame, and again at the render step: in 60 fps clips the gloves and the weapon are there in every
+  frame.
+- A forearm twist bone, `l_hand_twist` 64 / `r_hand_twist` 70, is the elbow's child beside the hand (`shoulder_twist`
+  45 / 68 the shoulder's). Left as the game had it while the hand took the weapon's roll, the wrist's skin warped; it
+  takes half of the hand's added roll about the forearm now.
+- The left hand leaves the barrel's line in a reload (0.08-0.14 m off it against 0.05 held, a Liberator) and a melee
+  (about 1 m); the pose lets go when it is 3-6 cm further off than its hold.
 - Aimed at the game's hit point, the barrel swung several degrees a frame as that point jumped between near grass and
   the horizon; it points 50 m along the view instead (Arma's way).
 

@@ -103,12 +103,17 @@ void fp_pose_reset(void);
 void fp_pose_apply(uintptr_t diver, const float* view, FpvVec3 target, FpvVec3 facing, int aiming,
     float mix, float dt);
 void fp_pose_restore(void);
+/* Right after the engine's scene update (before the game's logic and the render step): the pose again on the fresh
+ * game pose, at the last render's ready place kept with the head, so the renderer, which reads the skinned bones on its
+ * own thread at times of its own, finds the pose there almost all frame (fp_pose.c). */
+void fp_pose_again(float dt);
 float fp_pose_weight(void);
 
 /* The camera filter (fp_camera.c): the camera at the Helldiver's eyes while the view is First Person's. */
 void fp_camera_reset(void);
 int fp_camera_filter(float* pose, void* context);
 void fp_camera_after(void* context);  /* after the render: the ready pose put back */
+void fp_camera_after_scene(float dt);  /* after the scene update: the ready pose again */
 
 #ifdef FPV_PROBE
 /* A probe build's pose-setter census (fp_probe.c). */

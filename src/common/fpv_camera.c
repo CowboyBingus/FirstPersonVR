@@ -27,6 +27,7 @@
 #define CAM_UNIT 0x9D8C0u
 #define CAM_MAIN_WORLD 0x317DE0u
 #define CAM_WORLD_RENDER_POSE 0x230920u
+#define CAM_SCENE_UPDATE 0x1B0B10u  /* a world's scene update (World.update_scene, exe+0x3ED660, calls it) */
 #define CAM_RETRY_FRAMES 30       /* a search that found nothing waits this long before the next */
 
 /* The functions' first 32 bytes on build 25480438 (as HellForge's terminal camera pins them). */
@@ -34,6 +35,7 @@ static const char kStep[] = "48 83 EC 58 33 C0 4C 8D 05 EB 71 00 01 48 89 44 24 
 static const char kSetPose[] = "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 49 8B D8 48 63 FA E8 D6 0D EA FF 48 8B C8 48 8B F0";
 static const char kUpdate[] = "48 89 5C 24 08 48 89 74 24 10 48 89 7C 24 18 55 41 54 41 55 41 56 41 57 48 8D AC 24 30 F8 FF FF";
 static const char kUnit[] = "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 48 8B 35 1A 28 97 01 8B D9 48 8D 8E D0 00 00 00 FF";
+static const char kScene[] = "48 8B C4 48 89 58 10 48 89 70 18 48 89 78 20 55 41 54 41 55 41 56 41 57 48 8D 68 A8 48 81 EC 30";
 static const char kWorld[] = "48 89 5C 24 08 48 89 74 24 10 48 89 7C 24 18 48 8B 05 12 84 6F 01 33 C9 0F 57 C0 8B D1 8B D9 44";
 
 typedef void (*StepFn)(void* app);
@@ -41,6 +43,7 @@ typedef void (*SetPoseFn)(uint32_t unit, int32_t node, const float* pose);
 typedef void (*UpdateFn)(uintptr_t world, uintptr_t unit);
 typedef uintptr_t (*UnitFn)(uint32_t unit);
 typedef uintptr_t (*WorldFn)(void);
+typedef void (*SceneFn)(uintptr_t world, float dt, float scale);
 
 static StepFn g_step;
 static SetPoseFn g_setPose;
@@ -50,6 +53,8 @@ static WorldFn g_world;
 static int g_installed;
 static FpvCameraFilter g_filter;
 static void (*g_after)(void* context);
+static SceneFn g_scene;
+static void (*g_afterScene)(float dt);
 static void* g_context;
 static uint32_t g_ref;
 static uintptr_t g_refWorld;  /* the world g_ref was found in */
@@ -163,6 +168,17 @@ static void Apply(void)
 }
 
 /* Before the step: the boot script's render() renders the world, which takes the camera unit's pose then. */
+/* After the main world's scene update: the unit poses this frame's logic and render will read are fresh. */
+static void SceneDetour(uintptr_t world, float dt, float scale)
+{
+    g_scene(world, dt, scale);
+    if (g_afterScene == NULL || g_world == NULL || world == 0 || world != g_world()) return;
+    uintptr_t frame = g_frameWorld;
+    g_frameWorld = world;
+    g_afterScene(dt);
+    g_frameWorld = frame;
+}
+
 static void StepDetour(void* app)
 {
     Apply();
@@ -195,6 +211,9 @@ int fpv_camera_install(int32_t priority)
         fpv_log("camera", "off: the render step could not be hooked");
         return 0;
     }
+    if (!fpv_exe_matches(CAM_SCENE_UPDATE, kScene) ||
+        !fpv_exe_hook(CAM_SCENE_UPDATE, kScene, (void*)SceneDetour, (void**)&g_scene, priority))
+        fpv_log("camera", "the scene update could not be hooked: nothing runs after it");
     g_installed = 1;
     fpv_log("camera", "the render step is hooked");
     return 1;
@@ -207,6 +226,8 @@ void fpv_camera_set_filter(FpvCameraFilter filter, void* context)
 }
 
 void fpv_camera_set_after(void (*after)(void* context)) { g_after = after; }
+
+void fpv_camera_set_after_scene(void (*after)(float dt)) { g_afterScene = after; }
 
 int fpv_unit_local_pose(uintptr_t unit, int32_t node, float* pose)
 {

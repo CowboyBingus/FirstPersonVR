@@ -14,18 +14,19 @@
  * muzzle) the units linked to it (fpv_unit_link; a sight sits 5 cm off its mount node, so not by place); looked for
  * every POSE_SEARCH_FRAMES.
  *
- * Only the six joints change: each gets the local pose that puts it at its new world pose under its (new) parent, set
- * with the engine's set_local_pose, and the Helldiver and the weapon's units are updated with the engine's update_unit,
- * as the camera's pose is (writing world poses alone does not reach the render: tried live). That is before the render
- * step (fpv_camera's filter); after it (fpv_camera_set_after) the original local poses are set and the units updated
- * again, so the game's logic (where shots come from, what others see) never sees the pose. The conversion to local poses
- * is checked once against the engine's own (the elbow's), and the pose is off when they differ.
+ * Only the arms' joints change (shoulder, elbow, the forearm's twist bone, hand): each gets the local pose that puts it at
+ * its new world pose under its (new) parent, set with the engine's set_local_pose, and the Helldiver, its armour (the
+ * arms seen are the armour's) and the weapon's units are updated with the engine's update_unit, as the camera's pose is
+ * (writing world poses alone does not reach the render: tried live). That is before the render step (fpv_camera's
+ * filter); after it (fpv_camera_set_after) the original local poses are set back, and the game's next update writes its
+ * own pose over the world poses (see Update). The conversion to local poses is checked once against the engine's own
+ * (the elbow's), and the pose is off when they differ.
  *
  * The pose fades out (over a fifth of a second) while the game aims (its field of view zoomed: the right mouse already
  * brings the weapon up), and goes while the barrel points far from the body's facing (the hands busy: throws, melee).
  *
- * Cost per frame while held: six joints set and put back, the Helldiver and the weapon's units updated twice; the search
- * (the roots of the units near the grip) once a second.
+ * Cost per frame while held: eight joints set and put back, the Helldiver and its units (about 30) updated once; the
+ * search (the units near the grip and what links to them) twice a second.
  */
 #include <math.h>
 #include <string.h>
@@ -39,7 +40,11 @@
 #define POSE_AWAY_FROM 85.0f     /* degrees between the barrel and the body's facing where the pose starts to fade */
 #define POSE_AWAY_TO 100.0f      /* and where it is gone */
 #define POSE_AWAY_HOLD 0.1f      /* seconds turned away before it counts */
-#define POSE_MAX_WORLD 2048      /* world poses kept for the restore (the Helldiver's 107, its armour's and the weapon's) */
+#define POSE_HAND_FROM 0.03f     /* metres the left hand is further off the barrel than its hold where the pose fades */
+#define POSE_HAND_TO 0.06f       /* and where it is gone (live, a Liberator: held 0.05, reloading 0.08-0.14, melee 1) */
+#define POSE_HAND_RELAX 0.01f    /* metres a second the hold's distance may grow (another weapon's grip) */
+#define POSE_JOINTS 8           /* set a frame: shoulder, elbow, forearm twist and hand of each arm */
+#define POSE_TWIST_SHARE 0.5f    /* of the hand's added roll the forearm's twist bone takes (the skin between them) */
 #define POSE_CHECK 0.01f         /* the conversion's largest difference from the engine's own local pose */
 
 static struct
@@ -47,18 +52,24 @@ static struct
     uintptr_t diver;
     uint32_t ref;
     int ok;                       /* the skeleton was understood */
-    int32_t shoulder[2], elbow[2], hand[2], above[2], grip, muzzle;
+    int32_t shoulder[2], elbow[2], hand[2], twist[2], above[2], grip, muzzle;  /* twist: the forearm's, -1 none */
     uintptr_t units[POSE_MAX_UNITS];
     int nunits, wait;
     float weight;
     float awayFor;                /* seconds the barrel has been turned away */
-    int32_t setNode[6];           /* the joints set this frame, and their original local poses */
-    float setOriginal[6][16];
+    int32_t leftGrip, head;       /* attach_hand_l, head */
+    FpvVec3 facing;               /* the last frame's body facing, game aim and switch mix (for the scene pass) */
+    int aiming;
+    float mix;
+    int kept;                     /* readyAt and dirAt hold the last render's ready place, in the head's frame */
+    FpvVec3 readyAt, dirAt;
+    int again;                    /* the scene pass posed this frame (its measure in w) */
+    float w;
+    float hold;                   /* the left hand's least distance off the barrel's line lately: its hold (0: none) */
+    uintptr_t holdWeapon;         /* the weapon that hold is for */
+    int32_t setNode[POSE_JOINTS];  /* the joints set this frame, and their original local poses */
+    float setOriginal[POSE_JOINTS][16];
     int nset;
-    float* worldAt[1 + POSE_MAX_UNITS];  /* the world poses the update changes, and their originals */
-    uint32_t worldCount[1 + POSE_MAX_UNITS];
-    float worldOriginal[POSE_MAX_WORLD][16];
-    int nworld;
     int loggedSkeleton, loggedWeapon, loggedCheck;
 } g;
 /* The ready place, in the view's frame (metres): forward, right, up from the eye. */
@@ -201,11 +212,15 @@ static int Classify(uintptr_t diver)
         g.shoulder[side] = Node(diver, names[side][0]);
         g.elbow[side] = Node(diver, names[side][1]);
         g.hand[side] = Node(diver, names[side][2]);
+        g.twist[side] = Node(diver, side == 0 ? "l_hand_twist" : "r_hand_twist");
+        if (g.twist[side] >= 0 && fpv_unit_parent(diver, g.twist[side]) != g.elbow[side]) g.twist[side] = -1;
         g.above[side] = fpv_unit_parent(diver, g.shoulder[side]);
         if (g.above[side] < 0 || fpv_unit_parent(diver, g.elbow[side]) != g.shoulder[side] ||
             fpv_unit_parent(diver, g.hand[side]) != g.elbow[side]) return 0;
     }
     g.grip = Node(diver, "attach_hand_r");
+    g.leftGrip = Node(diver, "attach_hand_l");
+    g.head = Node(diver, "head");
     g.muzzle = Node(diver, "weapon_aim");
     if (g.grip < 0 || g.muzzle < 0 || !Agrees(diver)) return 0;
     g.ok = 1;
@@ -275,11 +290,42 @@ static FpvVec3 Elbow(FpvVec3 s, FpvVec3 e, FpvVec3 t, float a, float b)
 static void Set(int32_t node, const float* world, const float* parentWorld)
 {
     float original[16], local[16];
-    if (g.nset >= 6 || !fpv_unit_local_pose(g.diver, node, original)) return;
+    if (!fpv_unit_local_pose(g.diver, node, original)) return;
     Local(world, parentWorld, original, local);
-    g.setNode[g.nset] = node;
-    memcpy(g.setOriginal[g.nset++], original, sizeof original);
+    int known = 0;
+    for (int i = 0; i < g.nset; i++) known |= g.setNode[i] == node;  /* set by the scene pass: its original stands */
+    if (!known && g.nset >= POSE_JOINTS) return;
+    if (!known)
+    {
+        g.setNode[g.nset] = node;
+        memcpy(g.setOriginal[g.nset++], original, sizeof original);
+    }
     fpv_unit_set_local_pose(g.ref, node, local);
+}
+
+/* The forearm's twist bone (a child of the elbow, the skin before the wrist) turned with the hand: the hand takes the
+ * weapon's roll and the forearm only the least turn that reaches it, so the hand's roll about the forearm grows, and with
+ * the twist bone left as the game had it the wrist's skin warped (live). It takes POSE_TWIST_SHARE of that roll. */
+static void Twist(int side, const Move* fore, const Rot* hand, FpvVec3 e2, FpvVec3 t, const float* el2)
+{
+    float tw[16], tw2[16];
+    FpvVec3 axis = fpv_sub(t, e2);
+    if (g.twist[side] < 0 || !fpv_normalize(&axis) || !fpv_unit_world_pose(g.diver, g.twist[side], tw)) return;
+    /* The roll: a direction across the forearm as the forearm's move carries it, against the hand's move. */
+    FpvVec3 across = fpv_cross(axis, fabsf(axis.z) < 0.9f ? fpv_v3(0, 0, 1) : fpv_v3(1, 0, 0));
+    fpv_normalize(&across);
+    Rot back = {{fore->r.m[0], fore->r.m[3], fore->r.m[6], fore->r.m[1], fore->r.m[4], fore->r.m[7], fore->r.m[2],
+        fore->r.m[5], fore->r.m[8]}};  /* the forearm's move undone (a rotation's inverse is its transpose) */
+    Rot added = Then(&back, hand);
+    FpvVec3 turned = Turn(&added, across);
+    turned = fpv_sub(turned, fpv_scale(axis, fpv_dot(turned, axis)));
+    if (!fpv_normalize(&turned)) return;
+    float roll = atan2f(fpv_dot(fpv_cross(across, turned), axis), fpv_dot(across, turned));
+    MoveMatrix(tw, fore, tw2);
+    Move share = {AxisAngle(axis, roll * POSE_TWIST_SHARE), e2, e2};
+    float out[16];
+    MoveMatrix(tw2, &share, out);
+    Set(g.twist[side], out, el2);
 }
 
 /* One arm to its hand's new place: the upper arm about the shoulder, the forearm about the new elbow. */
@@ -300,47 +346,39 @@ static void Arm(int side, const Move* hands)
     MoveMatrix(ha, hands, ha2);
     Set(g.shoulder[side], sh2, above);
     Set(g.elbow[side], el2, sh2);
+    Twist(side, &fore, &hands->r, e2, t, el2);
     Set(g.hand[side], ha2, el2);
 }
 
-/* A unit's world poses kept (all of them: the update recomputes every node) before the update changes them. */
-static void Keep(int slot, uintptr_t unit)
-{
-    uint32_t count = 0, used = 0;
-    float* poses = fpv_unit_world_poses(unit, &count);
-    g.worldAt[slot] = NULL;
-    for (int i = 0; i < slot; i++) used += g.worldAt[i] != NULL ? g.worldCount[i] : 0;
-    if (poses == NULL || used + count > POSE_MAX_WORLD) return;
-    g.worldAt[slot] = poses;
-    g.worldCount[slot] = count;
-    memcpy(g.worldOriginal[used], poses, 64 * (size_t)count);
-}
-
-/* The engine's update of the Helldiver and the weapon's units, their world poses kept first: it takes the pose to the
- * render (writing world poses alone does not). */
+/* The engine's update of the Helldiver and its units (armour, weapon, parts): it takes the pose to the render (writing
+ * world poses alone does not). Their world poses are not put back after the render: the renderer reads the skinned
+ * meshes' bones later, on its own thread, and a copy back raced it (the gloves drawn at the hip in most frames, on the
+ * weapon in some: the flicker, live). The game's next update writes its own pose over them before its logic runs. */
 static void Update(void)
 {
-    g.nworld = 1 + g.nunits;
-    Keep(0, g.diver);
-    for (int u = 0; u < g.nunits; u++) Keep(1 + u, g.units[u]);
     fpv_unit_update(g.diver);
     for (int u = 0; u < g.nunits; u++) fpv_unit_update(g.units[u]);
 }
 
-/* The world poses as they were: the game's logic next frame reads the game's own pose. Without the engine's update, so
- * the render keeps this frame's pose as the last one it drew (an update back made the renderer blur the weapon, as if
- * it moved between the two every frame: live). */
-static void Unkeep(void)
+/* How much of the pose the left hand allows: all of it while it holds the weapon, none once it leaves (a reload's
+ * magazine, a melee: the barrel can stay near the body's facing through a reload, and the raised weapon turned on its
+ * side filled the view, live). Measured as its distance off the barrel's line against its hold, the least distance
+ * lately (each weapon is held its own way; a new weapon starts again). */
+static float Hands(FpvVec3 grip, FpvVec3 barrel, float dt)
 {
-    uint32_t used = 0;
-    for (int i = 0; i < g.nworld; i++)
-    {
-        if (g.worldAt[i] == NULL) continue;
-        memcpy(g.worldAt[i], g.worldOriginal[used], 64 * (size_t)g.worldCount[i]);
-        used += g.worldCount[i];
-    }
-    g.nworld = 0;
+    float lg[16];
+    if (g.leftGrip < 0 || !fpv_normalize(&barrel) || !fpv_unit_world_pose(g.diver, g.leftGrip, lg)) return 1;
+    FpvVec3 d = fpv_sub(Point(lg), grip), across = fpv_sub(d, fpv_scale(barrel, fpv_dot(d, barrel)));
+    float off = sqrtf(fpv_dot(across, across));
+    uintptr_t weapon = g.nunits > 0 ? g.units[0] : 0;
+    if (g.hold <= 0 || weapon != g.holdWeapon) { g.hold = off; g.holdWeapon = weapon; }
+    g.hold = fminf(off, g.hold + POSE_HAND_RELAX * dt);
+    float excess = off - g.hold;
+    if (excess <= POSE_HAND_FROM) return 1;
+    if (excess >= POSE_HAND_TO) return 0;
+    return (POSE_HAND_TO - excess) / (POSE_HAND_TO - POSE_HAND_FROM);
 }
+
 /* How much of the pose the barrel's direction allows: all of it near the body's facing, none past POSE_AWAY_TO. The
  * body's, not the view's: the Helldiver faces where it walks (the barrel 37 degrees from the view walking forward, 91
  * walking back: live), and in first person the weapon is held where the player looks all the same. From the body (live):
@@ -364,41 +402,96 @@ static void Find(FpvVec3 grip)
     g.wait = POSE_SEARCH_FRAMES;
 }
 
-void fp_pose_apply(uintptr_t diver, const float* view, FpvVec3 target, FpvVec3 facing, int aiming,
-    float mix, float dt)
+/* How much of the pose this frame (0..1), from the game's own pose: the game's aim and the switch fade; the barrel
+ * turning away or the left hand leaving the weapon (reloads, throws, melee) take the pose with them at once (a fading
+ * pose turned a reloading weapon upside down over the view: live). */
+static float Measure(FpvVec3 grip, FpvVec3 barrel, FpvVec3 forward, float dt)
 {
-    g.nset = 0;
-    if (diver != g.diver && !Classify(diver))
-        fpv_log_once(&g.loggedSkeleton, "pose", "the Helldiver's arms are not as expected: no ready pose (said once)");
-    float gw[16], mw[16];
-    if (!g.ok || !fpv_unit_world_pose(diver, g.grip, gw) || !fpv_unit_world_pose(diver, g.muzzle, mw)) return;
-    FpvVec3 grip = Point(gw), barrel = fpv_sub(Point(mw), grip);
-    FpvVec3 eye = fpv_pose_position(view), forward = fpv_pose_forward(view), right = fpv_pose_right(view),
-            up = fpv_pose_up(view);
-    /* The game's aim and the switch fade; the barrel turning away (reloads, sprints, throws) takes the pose with it at
-     * once (a fading pose turned a reloading weapon upside down over the view: live). */
-    float want = (aiming ? 0.0f : 1.0f) * (mix < 0 ? 0 : mix > 1 ? 1 : mix);
+    float want = (g.aiming ? 0.0f : 1.0f) * (g.mix < 0 ? 0 : g.mix > 1 ? 1 : g.mix);
     float k = 1 - expf(-POSE_RATE * (dt > 0 ? dt : 0));
     g.weight += (want - g.weight) * (dt > 0 ? k : 1);
-    float away = Away(barrel, fpv_dot(facing, facing) > 0.5f ? facing : forward);
+    float away = fminf(Away(barrel, fpv_dot(g.facing, g.facing) > 0.5f ? g.facing : forward), Hands(grip, barrel, dt));
     g.awayFor = away < 1 ? g.awayFor + dt : 0;
     if (g.awayFor < POSE_AWAY_HOLD) away = 1;  /* a walk's sway spikes for a frame (live): only a held turn counts */
-    if (g.weight * away < 0.01f) return;
+    return g.weight * g.weight * (3 - 2 * g.weight) * away;
+}
+
+/* The hands (and the weapon on them) moved by w of the way to the ready place, the barrel along dir; the arms reach. */
+static void Place(FpvVec3 grip, FpvVec3 barrel, FpvVec3 ready, FpvVec3 dir, float w)
+{
     Find(grip);
-    FpvVec3 ready = fpv_add(eye, fpv_add(fpv_scale(forward, kReady[0]), fpv_add(fpv_scale(right, kReady[1]),
-        fpv_scale(up, kReady[2]))));
-    float w = g.weight * g.weight * (3 - 2 * g.weight) * away;
-    Move hands = {Between(barrel, fpv_sub(target, ready), w), grip, fpv_add(grip, fpv_scale(fpv_sub(ready, grip), w))};
+    Move hands = {Between(barrel, dir, w), grip, fpv_add(grip, fpv_scale(fpv_sub(ready, grip), w))};
     Arm(0, &hands);
     Arm(1, &hands);
     Update();
 }
 
+/* A point (or, with point 0, a direction) into the head's frame and back: the ready place kept with the head between the
+ * render and the next scene update. */
+static FpvVec3 ToHead(const float* head, FpvVec3 v, int point)
+{
+    FpvVec3 d = point ? fpv_sub(v, Point(head)) : v, out;
+    float* o = &out.x;
+    for (int i = 0; i < 3; i++)
+    {
+        FpvVec3 r = Row(head, i);
+        float n = fpv_dot(r, r);
+        o[i] = n > 1e-12f ? fpv_dot(d, r) / n : 0;
+    }
+    return out;
+}
+
+static FpvVec3 FromHead(const float* head, FpvVec3 v, int point)
+{
+    FpvVec3 out = fpv_add(fpv_scale(Row(head, 0), v.x), fpv_add(fpv_scale(Row(head, 1), v.y), fpv_scale(Row(head, 2), v.z)));
+    return point ? fpv_add(out, Point(head)) : out;
+}
+
+void fp_pose_apply(uintptr_t diver, const float* view, FpvVec3 target, FpvVec3 facing, int aiming,
+    float mix, float dt)
+{
+    if (!g.again) g.nset = 0;
+    if (diver != g.diver && !Classify(diver))
+        fpv_log_once(&g.loggedSkeleton, "pose", "the Helldiver's arms are not as expected: no ready pose (said once)");
+    float gw[16], mw[16], hw[16];
+    if (!g.ok || !fpv_unit_world_pose(diver, g.grip, gw) || !fpv_unit_world_pose(diver, g.muzzle, mw)) return;
+    FpvVec3 grip = Point(gw), barrel = fpv_sub(Point(mw), grip);
+    FpvVec3 eye = fpv_pose_position(view), forward = fpv_pose_forward(view);
+    FpvVec3 ready = fpv_add(eye, fpv_add(fpv_scale(forward, kReady[0]), fpv_add(fpv_scale(fpv_pose_right(view), kReady[1]),
+        fpv_scale(fpv_pose_up(view), kReady[2]))));
+    FpvVec3 dir = fpv_sub(target, ready);
+    g.facing = facing;
+    g.aiming = aiming;
+    g.mix = mix;
+    /* Measured once a frame on the game's pose: by the scene pass when it ran (the arms are raised already then). */
+    float w = g.again ? g.w : Measure(grip, barrel, forward, dt);
+    g.kept = g.head >= 0 && fpv_unit_world_pose(diver, g.head, hw);
+    if (g.kept)
+    {
+        g.readyAt = ToHead(hw, ready, 1);
+        g.dirAt = ToHead(hw, dir, 0);
+    }
+    if (w >= 0.01f) Place(grip, barrel, ready, dir, w);
+}
+
+void fp_pose_again(float dt)
+{
+    float gw[16], mw[16], hw[16];
+    if (!g.kept || !g.ok || g.diver == 0) return;
+    g.kept = 0;  /* only for the frame after one the render step posed */
+    if (!fpv_unit_world_pose(g.diver, g.grip, gw) || !fpv_unit_world_pose(g.diver, g.muzzle, mw) ||
+        !fpv_unit_world_pose(g.diver, g.head, hw)) return;
+    g.nset = 0;
+    FpvVec3 grip = Point(gw), barrel = fpv_sub(Point(mw), grip), dir = FromHead(hw, g.dirAt, 0);
+    g.w = Measure(grip, barrel, dir, dt);
+    g.again = 1;
+    if (g.w >= 0.01f) Place(grip, barrel, FromHead(hw, g.readyAt, 1), dir, g.w);
+}
+
 void fp_pose_restore(void)
 {
-    if (g.nset == 0) return;
     for (int i = g.nset - 1; i >= 0; i--) fpv_unit_set_local_pose(g.ref, g.setNode[i], g.setOriginal[i]);
     g.nset = 0;
-    Unkeep();
+    g.again = 0;
 }
 float fp_pose_weight(void) { return g.weight; }

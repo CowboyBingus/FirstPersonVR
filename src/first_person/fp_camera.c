@@ -258,6 +258,11 @@ static int OnFoot(int known, int mission, FpvVec3 d)
 
 void fp_camera_after(void* context) { fp_pose_restore(); }
 
+void fp_camera_after_scene(float dt)
+{
+    if (fp_options()->ready_pose) fp_pose_again(dt);
+}
+
 /* The weapon held up in the view (fp_pose.c), its barrel along the view as Arma holds it (aimed at the shots' hit point,
  * it swung several degrees a frame as that point jumped between near grass and the horizon: live); not while the game's
  * own sights zoom. */
