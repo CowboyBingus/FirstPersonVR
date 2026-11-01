@@ -13,7 +13,8 @@ The mods are in progress. First Person, on foot in missions (seen in game 2026-1
 
 - The camera at the Helldiver's eyes, steadied so running does not bob the view, down to the ground when prone.
 - A wider view, Arma 3's 74 degrees top to bottom (the game's is 55), with the weapon held up at the lower right of
-  the view while hip firing, as a soldier carries a rifle at the ready, its scope and other attachments on it. It
+  the view while hip firing, as a soldier carries a rifle at the ready, held in your gloved hands with its scope and
+  other attachments on it, the barrel along the view. It
   goes back to the game's own pose while you aim (right mouse), reload, throw or melee.
 - Your cape and helmet are hidden while you look through your Helldiver's eyes (the cape hung in the view looking
   down, the helmet's brim across the top), and shown again in third person. One hidden by another mod stays hidden.

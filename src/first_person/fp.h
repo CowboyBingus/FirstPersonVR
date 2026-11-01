@@ -104,7 +104,6 @@ void fp_pose_apply(uintptr_t diver, const float* view, FpvVec3 target, FpvVec3 f
     float mix, float dt);
 void fp_pose_restore(void);
 float fp_pose_weight(void);
-float fp_aim_distance(void);  /* the smoothed distance to where the game's line of fire hits (0: none yet) */
 
 /* The camera filter (fp_camera.c): the camera at the Helldiver's eyes while the view is First Person's. */
 void fp_camera_reset(void);

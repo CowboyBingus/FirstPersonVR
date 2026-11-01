@@ -54,6 +54,7 @@
 #define FP_BLEND_SECONDS 0.25f
 #define FP_GAME_SIGHTS 0.5f     /* the game's camera this near the head is its own first-person aim */
 #define FP_GAME_FOV 0.96f       /* the game's own vertical field of view, unzoomed (live: 0.9599 rad, 55 degrees) */
+#define FP_READY_DISTANCE 50.0f /* metres along the view the weapon points at */
 
 static struct
 {
@@ -257,12 +258,14 @@ static int OnFoot(int known, int mission, FpvVec3 d)
 
 void fp_camera_after(void* context) { fp_pose_restore(); }
 
-/* The weapon held up in the view (fp_pose.c), aimed where the shots land; not while the game's own sights zoom. */
+/* The weapon held up in the view (fp_pose.c), its barrel along the view as Arma holds it (aimed at the shots' hit point,
+ * it swung several degrees a frame as that point jumped between near grass and the horizon: live); not while the game's
+ * own sights zoom. */
 static void ReadyPose(const float* pose, FpvVec3 facing, float t, float dt)
 {
     if (!fp_options()->ready_pose) return;
-    float gameFov = fpv_camera_fov(), d = fp_aim_distance();
-    FpvVec3 target = fpv_add(fpv_pose_position(pose), fpv_scale(fpv_pose_forward(pose), d > 1 ? d : 100.0f));
+    float gameFov = fpv_camera_fov();
+    FpvVec3 target = fpv_add(fpv_pose_position(pose), fpv_scale(fpv_pose_forward(pose), FP_READY_DISTANCE));
     fp_pose_apply(g.unit, pose, target, facing, gameFov > 0 && gameFov < FP_GAME_FOV * 0.97f, t, dt);
 }
 

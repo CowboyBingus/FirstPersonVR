@@ -31,14 +31,15 @@
 #include <string.h>
 #include "fp.h"
 
-#define POSE_MAX_UNITS 12
+#define POSE_MAX_UNITS 40
 #define POSE_SEARCH_FRAMES 30
-#define POSE_SEARCH_RANGE 1.5f   /* metres from the grip a weapon's part can be */
+#define POSE_SEARCH_RANGE 2.5f   /* metres from the grip a weapon's part or the armour's root can be */
 #define POSE_ON 0.002f           /* metres: a root this near a node is mounted on it */
 #define POSE_RATE 5.0f           /* per second: the fade */
-#define POSE_AWAY_FROM 58.0f     /* degrees between the barrel and the body's facing where the pose starts to fade */
-#define POSE_AWAY_TO 75.0f       /* and where it is gone */
-#define POSE_MAX_WORLD 640       /* world poses kept for the restore (the Helldiver's 107 and the weapon's) */
+#define POSE_AWAY_FROM 85.0f     /* degrees between the barrel and the body's facing where the pose starts to fade */
+#define POSE_AWAY_TO 100.0f      /* and where it is gone */
+#define POSE_AWAY_HOLD 0.1f      /* seconds turned away before it counts */
+#define POSE_MAX_WORLD 2048      /* world poses kept for the restore (the Helldiver's 107, its armour's and the weapon's) */
 #define POSE_CHECK 0.01f         /* the conversion's largest difference from the engine's own local pose */
 
 static struct
@@ -50,6 +51,7 @@ static struct
     uintptr_t units[POSE_MAX_UNITS];
     int nunits, wait;
     float weight;
+    float awayFor;                /* seconds the barrel has been turned away */
     int32_t setNode[6];           /* the joints set this frame, and their original local poses */
     float setOriginal[6][16];
     int nset;
@@ -211,11 +213,13 @@ static int Classify(uintptr_t diver)
 }
 /* ---- the weapon ----------------------------------------------------------------------------------------------------- */
 
-/* Linked to one of the units found already (the engine's link: a scope sits off its mount node, live 5 cm). */
+/* Linked to the Helldiver (its armour: the arms seen are the armour's, with its own copies of the arm bones) or to one
+ * of the units found already (the engine's link: a scope sits off its mount node, live 5 cm). */
 static int Mounted(uintptr_t unit)
 {
     uintptr_t link = fpv_unit_link(unit);
     uint32_t count;
+    if (link != 0 && (uintptr_t)fpv_unit_world_poses(g.diver, &count) == link) return 1;
     for (int k = 0; link != 0 && k < g.nunits; k++)
         if ((uintptr_t)fpv_unit_world_poses(g.units[k], &count) == link) return 1;
     return 0;
@@ -350,6 +354,16 @@ static float Away(FpvVec3 barrel, FpvVec3 forward)
     return (POSE_AWAY_TO - angle) / (POSE_AWAY_TO - POSE_AWAY_FROM);
 }
 
+/* The weapon and its parts looked for every POSE_SEARCH_FRAMES, and at once when the weapon switched. */
+static void Find(FpvVec3 grip)
+{
+    float root[16];
+    FpvVec3 off = g.nunits > 0 && fpv_unit_world_pose(g.units[0], 0, root) ? fpv_sub(Point(root), grip) : fpv_v3(0, 0, 0);
+    if (g.wait-- > 0 && fpv_dot(off, off) <= POSE_ON * POSE_ON) return;
+    Search(fpv_camera_world(), grip);
+    g.wait = POSE_SEARCH_FRAMES;
+}
+
 void fp_pose_apply(uintptr_t diver, const float* view, FpvVec3 target, FpvVec3 facing, int aiming,
     float mix, float dt)
 {
@@ -367,14 +381,10 @@ void fp_pose_apply(uintptr_t diver, const float* view, FpvVec3 target, FpvVec3 f
     float k = 1 - expf(-POSE_RATE * (dt > 0 ? dt : 0));
     g.weight += (want - g.weight) * (dt > 0 ? k : 1);
     float away = Away(barrel, fpv_dot(facing, facing) > 0.5f ? facing : forward);
+    g.awayFor = away < 1 ? g.awayFor + dt : 0;
+    if (g.awayFor < POSE_AWAY_HOLD) away = 1;  /* a walk's sway spikes for a frame (live): only a held turn counts */
     if (g.weight * away < 0.01f) return;
-    float root[16];
-    FpvVec3 off = g.nunits > 0 && fpv_unit_world_pose(g.units[0], 0, root) ? fpv_sub(Point(root), grip) : fpv_v3(0, 0, 0);
-    if (g.wait-- <= 0 || fpv_dot(off, off) > POSE_ON * POSE_ON)  /* the weapon switched: its parts at once */
-    {
-        Search(fpv_camera_world(), grip);
-        g.wait = POSE_SEARCH_FRAMES;
-    }
+    Find(grip);
     FpvVec3 ready = fpv_add(eye, fpv_add(fpv_scale(forward, kReady[0]), fpv_add(fpv_scale(right, kReady[1]),
         fpv_scale(up, kReady[2]))));
     float w = g.weight * g.weight * (3 - 2 * g.weight) * away;

@@ -86,6 +86,9 @@ What the mods rely on, and how each fact was established. "Live" means read in t
 
 - Screenshots from the OBS scene crop a game window larger than its canvas: the game drew 1920x1080 on a 1280x720
   canvas, so the scene showed the top-left part and the screen's centre looked off. Capture the source itself.
+- Recordings come from the scene, so the scene's capture must be fitted to the canvas (bounds type scale-inner at the
+  canvas size). Fitted to 1920x1080 on a 1280x720 canvas, clips showed the top-left part of the window and the weapon
+  looked pushed to the edge. Single screenshots catch one frame in ten or so: flicker needs a clip, frame by frame.
 - The harness's test-input mod drives the engine's keyboard and mouse (`harness.py input`): W walks, the mouse buttons
   aim and fire, `look` turns, Z goes prone, G throws. Left Ctrl did not crouch, and X did not emote, standing on the
   hellpod.
@@ -141,6 +144,14 @@ What the mods rely on, and how each fact was established. "Live" means read in t
 - A unit's scene graph +0x18 is the world-pose array of the unit it is linked to (World.link_unit): the weapon's points
   at the Helldiver's, each attachment's at the weapon's. A scope's root sits 5 cm off its mount node, so finding the
   parts by place missed it and it stayed at the hip.
+- The arms seen in first person are the armour's: about twenty units linked to the Helldiver (graph +0x18 = its world
+  poses), with their own copies of its bones (an armour node sits exactly on r_hand). Updating only the Helldiver left
+  them at the hip and the weapon floated; they are updated after it now.
+- The barrel against the body's facing on a Liberator with a scope: idle 59 degrees, walking 60-70, strafing 51-63, a
+  melee 96. A window at 58-75 dropped the weapon in and out while walking; it is 85-100 now and must hold a tenth of a
+  second (a walk's sway spikes for a frame).
+- Aimed at the game's hit point, the barrel swung several degrees a frame as that point jumped between near grass and
+  the horizon; it points 50 m along the view instead (Arma's way).
 
 ## Depth of field (live 2026-10-31)
 
